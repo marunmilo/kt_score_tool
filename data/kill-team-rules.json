@@ -57,7 +57,7 @@
     { "name": "Kommandos", "faction": "Orks", "classified": true, "archetypes": ["Seek and Destroy", "Infiltration"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
     { "name": "Legionaries", "faction": "Chaos Space Marines", "classified": true, "archetypes": ["Seek and Destroy", "Security"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
     { "name": "Mandrakes", "faction": "Drukhari", "classified": true, "archetypes": ["Recon", "Infiltration"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
-    { "name": "Murderwing", "faction": "Aeldari", "classified": true, "archetypes": ["Seek and Destroy", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Murderwing", "faction": "Chaos", "classified": true, "archetypes": ["Seek and Destroy", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
     { "name": "Nemesis Claw", "faction": "Chaos Space Marines", "classified": true, "archetypes": ["Seek and Destroy", "Infiltration"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
     { "name": "Novitiates", "faction": "Adepta Sororitas", "classified": true, "archetypes": ["Security", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
     { "name": "Pathfinders", "faction": "T'au Empire", "classified": true, "archetypes": ["Infiltration", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },

@@ -261,6 +261,14 @@ h2 {
   color: #ffaaaa;
 }
 
+.preview-player-a {
+  color: #9ed0ff;
+}
+
+.preview-player-b {
+  color: #ffaaaa;
+}
+
 .mission-column p {
   max-width: 520px;
   color: var(--accent-2);
@@ -782,6 +790,16 @@ textarea {
   font-size: 16px;
 }
 
+select option {
+  background: #0b100e;
+  color: var(--text);
+}
+
+select option:checked {
+  background: #273026;
+  color: #fff5dd;
+}
+
 .hidden-select {
   position: absolute;
   width: 1px;
@@ -835,6 +853,29 @@ select.primary-unselected {
   border-color: rgba(215, 180, 106, 0.62);
   background: rgba(215, 180, 106, 0.14);
   color: #f1cf83;
+}
+
+select.primary-unselected option,
+.battle-inline-select.primary-unselected option {
+  background: #14120b;
+  color: #ffe0a0;
+}
+
+select.primary-unselected option:checked,
+.battle-inline-select.primary-unselected option:checked {
+  background: #3a321a;
+  color: #fff8df;
+}
+
+select.primary-unselected:hover,
+select.primary-unselected:focus,
+.battle-inline-select.primary-unselected:hover,
+.battle-inline-select.primary-unselected:focus {
+  border-color: #e2bd69;
+  background: rgba(215, 180, 106, 0.22);
+  color: #ffe0a0;
+  box-shadow: 0 0 0 2px rgba(215, 180, 106, 0.26);
+  outline: none;
 }
 
 textarea {
@@ -1953,6 +1994,14 @@ textarea {
   text-align: center;
 }
 
+.report-team-line {
+  margin-top: -4px;
+  color: var(--text);
+  font-size: clamp(1rem, 3vw, 1.45rem);
+  font-weight: 900;
+  text-align: center;
+}
+
 .report-summary-card.winner-a .report-winner {
   border-color: rgba(128, 196, 255, 0.55);
   background: rgba(128, 196, 255, 0.14);
@@ -2201,26 +2250,41 @@ textarea {
 
 .tp-report-table td:nth-child(2),
 .tp-report-table td:nth-child(3),
-.tp-report-table td:nth-child(4) {
+.tp-report-table td:nth-child(4),
+.tp-report-table td:nth-child(5) {
   border-color: rgba(128, 196, 255, 0.45);
   background: rgba(128, 196, 255, 0.1);
   color: #b7dcff;
   font-weight: 900;
 }
 
-.tp-report-table td:nth-child(5),
 .tp-report-table td:nth-child(6),
-.tp-report-table td:nth-child(7) {
+.tp-report-table td:nth-child(7),
+.tp-report-table td:nth-child(8),
+.tp-report-table td:nth-child(9) {
   border-color: rgba(255, 148, 148, 0.45);
   background: rgba(255, 148, 148, 0.1);
   color: #ffc1c1;
   font-weight: 900;
 }
 
-.tp-report-table td:nth-child(4),
-.tp-report-table td:nth-child(7) {
+.tp-report-table td:nth-child(5),
+.tp-report-table td:nth-child(9) {
   font-size: 1.05rem;
   box-shadow: inset 0 0 0 1px rgba(126, 196, 179, 0.16);
+}
+
+.tp-report-table tbody tr:last-child th,
+.tp-report-table tbody tr:last-child td {
+  border-top: 1px solid rgba(215, 180, 106, 0.45);
+  background: rgba(215, 180, 106, 0.14);
+  color: var(--accent);
+  font-weight: 950;
+}
+
+.report-tp-total-card {
+  border-color: rgba(215, 180, 106, 0.55);
+  background: rgba(215, 180, 106, 0.1);
 }
 
 .report-notes {

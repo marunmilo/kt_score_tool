@@ -52,7 +52,7 @@ const embeddedRules = {
     { name: "Kommandos", faction: "Orks", classified: true, archetypes: ["Seek and Destroy","Infiltration"], notes: "Tac Op archetypes updated from player-verified faction reference." },
     { name: "Legionaries", faction: "Chaos Space Marines", classified: true, archetypes: ["Seek and Destroy","Security"], notes: "Tac Op archetypes updated from player-verified faction reference." },
     { name: "Mandrakes", faction: "Drukhari", classified: true, archetypes: ["Recon","Infiltration"], notes: "Tac Op archetypes updated from player-verified faction reference." },
-    { name: "Murderwing", faction: "Aeldari", classified: true, archetypes: ["Seek and Destroy","Recon"], notes: "Tac Op archetypes updated from player-verified faction reference." },
+    { name: "Murderwing", faction: "Chaos", classified: true, archetypes: ["Seek and Destroy","Recon"], notes: "Tac Op archetypes updated from player-verified faction reference." },
     { name: "Nemesis Claw", faction: "Chaos Space Marines", classified: true, archetypes: ["Seek and Destroy","Infiltration"], notes: "Tac Op archetypes updated from player-verified faction reference." },
     { name: "Novitiates", faction: "Adepta Sororitas", classified: true, archetypes: ["Security","Recon"], notes: "Tac Op archetypes updated from player-verified faction reference." },
     { name: "Pathfinders", faction: "T'au Empire", classified: true, archetypes: ["Infiltration","Recon"], notes: "Tac Op archetypes updated from player-verified faction reference." },
@@ -654,22 +654,21 @@ function updateSetupPreview() {
   const crit = selectedCrit()?.name || "No Crit Op";
   const killzone = $("killzone")?.value || "Volkus";
   const map = $("mapNumber")?.value || "Map 1";
-  if ($("setupPreviewPlayers")) $("setupPreviewPlayers").textContent = `${nameA} - ${teamA} vs ${nameB} - ${teamB}`;
+  if ($("setupPreviewPlayers")) {
+    const playerA = document.createElement("span");
+    playerA.className = "preview-player-a";
+    playerA.textContent = `${nameA} - ${teamA}`;
+    const playerB = document.createElement("span");
+    playerB.className = "preview-player-b";
+    playerB.textContent = `${nameB} - ${teamB}`;
+    $("setupPreviewPlayers").replaceChildren(playerA, document.createTextNode(" vs "), playerB);
+  }
   if ($("setupPreviewMission")) $("setupPreviewMission").textContent = `Mission: ${crit} / ${killzone} / ${map}`;
 }
 
 function renderSources() {
   $("sourceCard").innerHTML = `<span class="status-dot"></span><span>${rules.rulesVersion.name}<br>Checked ${rules.rulesVersion.checkedDate}</span>`;
-  $("sourceLinks").replaceChildren(
-    ...rules.rulesVersion.sources.map((source) => {
-      const link = document.createElement("a");
-      link.href = source.url;
-      link.target = "_blank";
-      link.rel = "noreferrer";
-      link.textContent = source.label;
-      return link;
-    })
-  );
+  $("sourceLinks")?.remove();
 }
 
 function renderSetupDate() {
@@ -1097,6 +1096,7 @@ function updateBattleLog() {
   updateTp4PrimarySummary();
   renderGameTp1Controls();
   updateLiveMode();
+  updateEndgameBattleReport();
 }
 
 function updateLiveMode() {
@@ -1152,6 +1152,32 @@ function updateEndgameResult() {
   if ($("endgameResultDetail")) {
     $("endgameResultDetail").innerHTML = `<span class="result-score-a">${totalA}</span><span class="result-score-divider"> - </span><span class="result-score-b">${totalB}</span>`;
   }
+  updateEndgameBattleReport();
+}
+
+function battleReportReady() {
+  return state.tacOps.a.revealed && state.tacOps.b.revealed && state.primary.a.revealed && state.primary.b.revealed;
+}
+
+let isRenderingEndgameBattleReport = false;
+
+function updateEndgameBattleReport() {
+  const panel = $("endgameBattleReportPanel");
+  const target = $("endgameBattleReport");
+  if (!panel || !target || isRenderingEndgameBattleReport) return;
+  const ready = battleReportReady();
+  panel.hidden = !ready;
+  if (!ready) {
+    target.replaceChildren();
+    return;
+  }
+  isRenderingEndgameBattleReport = true;
+  try {
+    generateBattleReport();
+    target.replaceChildren(...Array.from($("battleReport").childNodes).map((node) => node.cloneNode(true)));
+  } finally {
+    isRenderingEndgameBattleReport = false;
+  }
 }
 
 function setPage(page) {
@@ -1163,6 +1189,7 @@ function setPage(page) {
     button.classList.toggle("active", button.dataset.pageTarget === page);
   });
   if (page === "report") generateBattleReport();
+  if (page === "endgame") updateEndgameBattleReport();
 }
 
 function resetScores() {
@@ -1373,6 +1400,10 @@ function syncTurningPointDisplay() {
   if ($("turningPointDisplay")) $("turningPointDisplay").textContent = `TURNING POINT ${tp}`;
   if ($("tpMinus")) $("tpMinus").disabled = tp <= 1;
   if ($("tpPlus")) $("tpPlus").disabled = tp >= 4;
+  if ($("gameEndButton")) {
+    $("gameEndButton").textContent = tp >= 4 ? "End Game" : `TURNING POINT ${tp + 1}`;
+    $("gameEndButton").setAttribute("aria-label", tp >= 4 ? "End Game" : `Go to Turning Point ${tp + 1}`);
+  }
   if ($("tp1GameSetupPanel")) $("tp1GameSetupPanel").hidden = false;
   if ($("gamePrimaryGroup")) $("gamePrimaryGroup").hidden = tp !== 1;
   if ($("tp4PrimaryPanel")) $("tp4PrimaryPanel").hidden = tp !== 4;
@@ -1386,6 +1417,15 @@ function adjustTurningPoint(delta) {
   const next = clampNumber(Number(select.value || 1) + delta, 1, 4);
   select.value = String(next);
   handleTurningPointChange();
+}
+
+function advanceBattleFlow() {
+  const tp = clampNumber(Number($("turningPoint")?.value || 1), 1, 4);
+  if (tp >= 4) {
+    setPage("endgame");
+    return;
+  }
+  adjustTurningPoint(1);
 }
 
 function toggleEquipmentReady(player) {
@@ -1719,14 +1759,34 @@ function reportDetail(label, value, className = "") {
   return row;
 }
 
+function vpLabel(value) {
+  return `${Number(value || 0)} VP`;
+}
+
+function scoreNumber(value) {
+  return Number(value || 0);
+}
+
+function reportTeamName(player) {
+  const team = selectedTeam(player);
+  return team ? team.name : "Not selected";
+}
+
+function compactTpLine(row) {
+  const [tp, aCrit, aTac, aKill, bCrit, bTac, bKill] = row;
+  const aTotal = scoreNumber(aCrit) + scoreNumber(aTac) + scoreNumber(aKill);
+  const bTotal = scoreNumber(bCrit) + scoreNumber(bTac) + scoreNumber(bKill);
+  return `${tp}: ${playerName("a")} CO ${aCrit} / TO ${aTac} / KO ${aKill} / VP ${aTotal} | ${playerName("b")} CO ${bCrit} / TO ${bTac} / KO ${bKill} / VP ${bTotal}`;
+}
+
 function otherVpLine(player) {
   const value = Number(state.scores[player].other || 0);
-  return value === 0 ? null : `Other VP: ${value}`;
+  return value === 0 ? null : `Other: ${vpLabel(value)}`;
 }
 
 function otherVpDetail(player) {
   const value = Number(state.scores[player].other || 0);
-  return value === 0 ? null : reportDetail("Ruling / Other VP", value, "report-vp-row");
+  return value === 0 ? null : reportDetail("Ruling / Other VP", vpLabel(value), "report-vp-row");
 }
 
 function reportTeamLabel(player) {
@@ -1737,7 +1797,7 @@ function reportTeamLabel(player) {
 function reportTacLabel(player) {
   const tac = selectedTac(player);
   if (!state.tacOps[player].revealed) return "Sealed up - locked";
-  return tac ? `${tac.name} - ${tac.archetype}` : "Not selected";
+  return tac ? tac.name : "Not selected";
 }
 
 function playerReportRows(player) {
@@ -1749,19 +1809,36 @@ function playerReportRows(player) {
     ["Player", playerName(player)],
     ["Community Team", reportValue($(`communityTeam${label}`)?.value.trim(), "Not set")],
     ["Kill Team", team ? `${team.name} - ${team.faction}` : "Not selected"],
-    ["Archetype", team?.archetypes.join(" / ") || "Not selected"],
-    ["Tac Op", state.tacOps[player].revealed ? (tac ? `${tac.name} - ${tac.archetype}` : "Not selected") : "Sealed up - locked"],
+    ["Tac Op", state.tacOps[player].revealed ? (tac ? tac.name : "Not selected") : "Sealed up - locked"],
     ["Primary", exportedPrimaryLabel(player)],
-    ["Primary VP", exportedPrimaryScore(player) || 0],
+    ["Primary VP", vpLabel(exportedPrimaryScore(player) || 0)],
     ["Equipment Selection", state.equipment[player] ? "Revealed" : "Not revealed"],
     ["Equipment Setup", state.equipmentSetup[player] ? "Ready" : "Not marked ready"],
     ["CP", state.cp[player]],
     ["Starting Enemy Operatives", kill.startingEnemies],
     ["Enemy Operatives Incapacitated", kill.kills],
     ["Kill Grade", `KG ${kill.grade}`],
-    ["Kill Op VP", state.scores[player].kill],
-    ["Total VP", sumScore(player)]
+    ["Kill Op VP", vpLabel(state.scores[player].kill)],
+    ["Total VP", vpLabel(sumScore(player))]
   ];
+}
+
+function killOpVpAtTp(player, tpIndex) {
+  const label = playerLabel(player);
+  const startingEnemies = clampNumber($(`startEnemies${label}`)?.value, 1, 30);
+  const kills = state.liveKillsByTp[player]
+    .slice(0, tpIndex + 1)
+    .reduce((total, value) => total + Number(value || 0), 0);
+  const grade = killGradeFor(startingEnemies, kills);
+  if (tpIndex < 3) return grade;
+  const opponent = player === "a" ? "b" : "a";
+  const opponentLabel = playerLabel(opponent);
+  const opponentStartingEnemies = clampNumber($(`startEnemies${opponentLabel}`)?.value, 1, 30);
+  const opponentKills = state.liveKillsByTp[opponent]
+    .slice(0, tpIndex + 1)
+    .reduce((total, value) => total + Number(value || 0), 0);
+  const opponentGrade = killGradeFor(opponentStartingEnemies, opponentKills);
+  return grade + (grade > opponentGrade ? 1 : 0);
 }
 
 function tpReportRows() {
@@ -1771,37 +1848,74 @@ function tpReportRows() {
     const bCrit = Number(state.scores.b.crit[index] || 0);
     const aTac = Number(state.scores.a.tac[index] || 0);
     const bTac = Number(state.scores.b.tac[index] || 0);
+    const aKill = killOpVpAtTp("a", index);
+    const bKill = killOpVpAtTp("b", index);
     return [
       `TP${tp}`,
       aCrit,
       aTac,
-      aCrit + aTac,
+      aKill,
       bCrit,
       bTac,
-      bCrit + bTac
+      bKill
     ];
   });
 }
 
+function formattedTpReportRows() {
+  const rows = tpReportRows();
+  const totals = rows.reduce((total, row) => {
+    row.slice(1).forEach((value, index) => {
+      total[index] += Number(value || 0);
+    });
+    return total;
+  }, [0, 0, 0, 0, 0, 0]);
+  return [
+    ...rows.map(([tp, aCrit, aTac, aKill, bCrit, bTac, bKill]) => [
+      tp,
+      vpLabel(aCrit),
+      vpLabel(aTac),
+      vpLabel(aKill),
+      vpLabel(scoreNumber(aCrit) + scoreNumber(aTac) + scoreNumber(aKill)),
+      vpLabel(bCrit),
+      vpLabel(bTac),
+      vpLabel(bKill),
+      vpLabel(scoreNumber(bCrit) + scoreNumber(bTac) + scoreNumber(bKill))
+    ]),
+    [
+      "Total",
+      vpLabel(totals[0]),
+      vpLabel(totals[1]),
+      vpLabel(totals[2]),
+      vpLabel(totals[0] + totals[1] + totals[2]),
+      vpLabel(totals[3]),
+      vpLabel(totals[4]),
+      vpLabel(totals[5]),
+      vpLabel(totals[3] + totals[4] + totals[5])
+    ]
+  ];
+}
+
+function tpReportTextValue(value) {
+  return vpLabel(value);
+}
+
 function playerReportLine(player) {
-  const label = playerLabel(player);
-  const team = selectedTeam(player);
   const kill = killOpDetails(player);
   const critTotal = state.scores[player].crit.reduce((total, value) => total + Number(value || 0), 0);
   const tacTotal = state.scores[player].tac.reduce((total, value) => total + Number(value || 0), 0);
   return [
-    `Player ${label}: ${playerName(player)}`,
-    `Team: ${team ? `${team.name} - ${team.faction}` : "Not selected"}`,
-    `Tac Op: ${reportTacLabel(player)}`,
+    `${playerName(player)} - ${reportTeamLabel(player)}`,
+    `TO: ${reportTacLabel(player)}`,
     `Primary: ${exportedPrimaryLabel(player)}`,
-    `Crit VP: ${critTotal}`,
-    `Tac VP: ${tacTotal}`,
-    `Kill Op VP: ${state.scores[player].kill}`,
-    `Primary VP: ${exportedPrimaryScore(player) || 0}`,
+    `CO: ${vpLabel(critTotal)}`,
+    `TO VP: ${vpLabel(tacTotal)}`,
+    `KO: ${vpLabel(state.scores[player].kill)}`,
+    `Primary VP: ${vpLabel(exportedPrimaryScore(player) || 0)}`,
     otherVpLine(player),
-    `Total VP: ${sumScore(player)}`,
-    `Kill Grade: KG ${kill.grade}`,
-    `Enemy Operatives Incapacitated: ${kill.kills}`
+    `Total: ${vpLabel(sumScore(player))}`,
+    `KG: ${kill.grade}`,
+    `Incap: ${kill.kills}`
   ].filter(Boolean).join("\n");
 }
 
@@ -1814,14 +1928,11 @@ function reportPlayerCard(player) {
   const head = document.createElement("div");
   head.className = "report-player-head";
   const title = document.createElement("div");
-  const eyebrow = document.createElement("p");
-  eyebrow.className = "eyebrow";
-  eyebrow.textContent = `Player ${label}`;
   const name = document.createElement("h3");
   name.textContent = playerName(player);
   const team = document.createElement("p");
   team.textContent = reportTeamLabel(player);
-  title.append(eyebrow, name, team);
+  title.append(name, team);
   const total = document.createElement("output");
   total.textContent = `${sumScore(player)} VP`;
   head.append(title, total);
@@ -1829,17 +1940,16 @@ function reportPlayerCard(player) {
   const details = document.createElement("div");
   details.className = "report-detail-grid";
   details.append(...[
-    reportDetail("Archetype", selectedTeam(player)?.archetypes.join(" / ") || "Not selected"),
-    reportDetail("Tac Op", reportTacLabel(player)),
+    reportDetail("TO", reportTacLabel(player)),
     reportDetail("Primary", exportedPrimaryLabel(player)),
-    reportDetail("Crit Op VP", scoreTotal(player, "crit"), "report-vp-row"),
-    reportDetail("Tac Op VP", scoreTotal(player, "tac"), "report-vp-row"),
-    reportDetail("Kill Op VP", state.scores[player].kill, "report-vp-row"),
-    reportDetail("Primary VP", exportedPrimaryScore(player) || 0, "report-vp-row"),
+    reportDetail("CO", vpLabel(scoreTotal(player, "crit")), "report-vp-row"),
+    reportDetail("TO VP", vpLabel(scoreTotal(player, "tac")), "report-vp-row"),
+    reportDetail("KO", vpLabel(state.scores[player].kill), "report-vp-row"),
+    reportDetail("Primary VP", vpLabel(exportedPrimaryScore(player) || 0), "report-vp-row"),
     otherVpDetail(player),
-    reportDetail("Kill Grade", `KG ${kill.grade}`),
-    reportDetail("Enemy Operatives Incapacitated", kill.kills),
-    reportDetail("Final Total VP", `${sumScore(player)} VP`, "report-vp-row report-total-row")
+    reportDetail("KG", kill.grade),
+    reportDetail("Incap", kill.kills),
+    reportDetail("Total", vpLabel(sumScore(player)), "report-vp-row report-total-row")
   ].filter(Boolean));
 
   card.append(head, details);
@@ -1849,27 +1959,21 @@ function reportPlayerCard(player) {
 function battleReportWhatsappText() {
   const crit = selectedCrit();
   const notes = $("matchNotes").value.trim();
-  const tpLines = tpReportRows().map((row) => {
-    const [tp, aCrit, aTac, aTotal, bCrit, bTac, bTotal] = row;
-    return `${tp} - ${playerName("a")} Crit ${aCrit} / Tac ${aTac} / TP VP ${aTotal} | ${playerName("b")} Crit ${bCrit} / Tac ${bTac} / TP VP ${bTotal}`;
-  });
+  const tpLines = tpReportRows().map(compactTpLine);
 
   return [
-    "Kill Team Battle Report",
-    "",
     `${playerName("a")} ${sumScore("a")} - ${sumScore("b")} ${playerName("b")}`,
-    `Result: ${reportWinnerText()}`,
+    `${reportTeamName("a")} - ${reportTeamName("b")}`,
+    reportWinnerText(),
     "",
-    `Mission: ${crit?.name || "Not selected"}`,
-    `Killzone: ${$("killzone").value}`,
-    `Map: ${$("mapNumber").value}`,
-    `Current TP: TP${$("turningPoint").value}`,
+    `Mission: ${crit?.name || "Not selected"} / ${$("killzone").value} / ${$("mapNumber").value}`,
+    `TP: ${$("turningPoint").value}`,
     "",
     playerReportLine("a"),
     "",
     playerReportLine("b"),
     "",
-    "Turning Point Breakdown:",
+    "TP Breakdown:",
     ...tpLines,
     "",
     "Notes:",
@@ -1895,36 +1999,39 @@ function generateBattleReport() {
   const score = document.createElement("h2");
   score.className = "report-final-score";
   score.innerHTML = `<span class="score-a">${playerName("a")} ${totalA}</span><span>-</span><span class="score-b">${totalB} ${playerName("b")}</span>`;
+  const teamLine = document.createElement("p");
+  teamLine.className = "report-team-line";
+  teamLine.textContent = `${reportTeamName("a")} - ${reportTeamName("b")}`;
   const winner = document.createElement("p");
   winner.className = "report-winner";
-  winner.textContent = `Result: ${reportWinnerText()}`;
+  winner.textContent = reportWinnerText();
   const facts = document.createElement("div");
   facts.className = "report-summary-facts";
   facts.append(
     reportDetail("Mission", crit?.name || "Not selected"),
-    reportDetail("Killzone / Map", `${$("killzone").value} / ${$("mapNumber").value}`),
-    reportDetail("Teams", `${teamA?.name || "Not selected"} vs ${teamB?.name || "Not selected"}`),
+    reportDetail("Killzone", $("killzone").value),
+    reportDetail("Map", $("mapNumber").value),
     reportDetail("Generated", new Date().toLocaleString())
   );
-  summaryCard.append(score, winner, facts);
+  summaryCard.append(score, teamLine, winner, facts);
 
   const playerGrid = document.createElement("div");
   playerGrid.className = "report-player-grid";
   playerGrid.append(reportPlayerCard("a"), reportPlayerCard("b"));
 
   const tpTable = makeReportTable(
-    ["Turning Point", `${playerName("a")} Crit`, `${playerName("a")} Tac`, `${playerName("a")} TP VP`, `${playerName("b")} Crit`, `${playerName("b")} Tac`, `${playerName("b")} TP VP`],
-    tpReportRows(),
+    ["TP", `${playerName("a")} CO`, `${playerName("a")} TO`, `${playerName("a")} KO`, `${playerName("a")} VP`, `${playerName("b")} CO`, `${playerName("b")} TO`, `${playerName("b")} KO`, `${playerName("b")} VP`],
+    formattedTpReportRows(),
     "tp-report-table"
   );
   const tpSection = document.createElement("section");
   tpSection.className = "report-section report-tp-section";
   const tpTitle = document.createElement("h3");
-  tpTitle.textContent = "Turning Point Breakdown";
+  tpTitle.textContent = "VP Break Down Table";
   const tpCards = document.createElement("div");
   tpCards.className = "report-tp-accordion";
   tpReportRows().forEach((row) => {
-    const [tp, aCrit, aTac, aTotal, bCrit, bTac, bTotal] = row;
+    const [tp, aCrit, aTac, aKill, bCrit, bTac, bKill] = row;
     const details = document.createElement("details");
     details.className = "report-tp-card";
     details.open = true;
@@ -1933,12 +2040,29 @@ function generateBattleReport() {
     const body = document.createElement("div");
     body.className = "report-tp-card-body";
     body.append(
-      reportDetail(playerName("a"), `Crit ${aCrit} / Tac ${aTac} / TP VP ${aTotal}`, "player-a-text"),
-      reportDetail(playerName("b"), `Crit ${bCrit} / Tac ${bTac} / TP VP ${bTotal}`, "player-b-text")
+      reportDetail(playerName("a"), `CO ${aCrit} / TO ${aTac} / KO ${aKill} / VP ${scoreNumber(aCrit) + scoreNumber(aTac) + scoreNumber(aKill)}`, "player-a-text"),
+      reportDetail(playerName("b"), `CO ${bCrit} / TO ${bTac} / KO ${bKill} / VP ${scoreNumber(bCrit) + scoreNumber(bTac) + scoreNumber(bKill)}`, "player-b-text")
     );
     details.append(summary, body);
     tpCards.append(details);
   });
+  const formattedRows = formattedTpReportRows();
+  const totalRow = formattedRows[formattedRows.length - 1];
+  if (totalRow) {
+    const details = document.createElement("details");
+    details.className = "report-tp-card report-tp-total-card";
+    details.open = true;
+    const summary = document.createElement("summary");
+    summary.textContent = "Total";
+    const body = document.createElement("div");
+    body.className = "report-tp-card-body";
+    body.append(
+      reportDetail(playerName("a"), `CO ${totalRow[1]} / TO ${totalRow[2]} / KO ${totalRow[3]} / VP ${totalRow[4]}`, "player-a-text"),
+      reportDetail(playerName("b"), `CO ${totalRow[5]} / TO ${totalRow[6]} / KO ${totalRow[7]} / VP ${totalRow[8]}`, "player-b-text")
+    );
+    details.append(summary, body);
+    tpCards.append(details);
+  }
   tpSection.append(tpTitle, tpTable, tpCards);
 
   const notesBlock = document.createElement("section");
@@ -2042,7 +2166,7 @@ function wireEvents() {
   $("gameInitiativeB").addEventListener("click", () => toggleInitiative("b"));
   $("setupGameStart").addEventListener("click", () => setPage("deploy"));
   $("deployGameStart").addEventListener("click", () => setPage("game"));
-  $("gameEndButton").addEventListener("click", () => setPage("endgame"));
+  $("gameEndButton").addEventListener("click", advanceBattleFlow);
   $("openBattleReportPage").addEventListener("click", () => setPage("report"));
   ["A", "B"].forEach((player) => {
     const playerKey = player.toLowerCase();
