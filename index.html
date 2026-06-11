@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Kill Team Score Tool</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Kill Team 3rd Edition</p>
+          <h1>Kill Team Score Tool</h1>
+          <p class="subtitle">Approved Ops 2025 scoring, team setup, chess clock, and Excel-ready match export.</p>
+        </div>
+        <div class="source-card" id="sourceCard">
+          <span class="status-dot"></span>
+          <span>Loading rules data...</span>
+        </div>
+        <button class="reset-match-button" id="resetMatchButton" type="button">Reset</button>
+      </header>
+
+      <nav class="page-nav" aria-label="Scoreboard pages">
+        <button class="page-tab active" type="button" data-page-target="setup">Setup</button>
+        <button class="page-tab" type="button" data-page-target="deploy">Deploy</button>
+        <button class="page-tab" type="button" data-page-target="game">Battle</button>
+        <button class="page-tab" type="button" data-page-target="endgame">Endgame</button>
+        <button class="page-tab" type="button" data-page-target="report">Battle Report</button>
+      </nav>
+
+      <section class="page active" id="pageSetup" data-page="setup" aria-label="Setup page">
+        <section class="setup-date-strip" aria-label="Match date">
+          <span>Match Date</span>
+          <strong id="setupDate">Today</strong>
+        </section>
+
+        <section class="grid two-col" aria-label="Player setup">
+          <article class="panel player-panel" data-player="a">
+            <div class="panel-title">
+              <div class="setup-player-title">
+                <h2 id="nameALabel">Player A - maru</h2>
+                <span id="setupTeamALabel">Angels of Death</span>
+              </div>
+              <output class="score-badge setup-vp-hidden" id="totalA">0 VP</output>
+            </div>
+
+            <label>
+              Player name
+              <input id="playerAName" type="text" value="maru" autocomplete="off">
+            </label>
+
+            <label>
+              Community team
+              <input id="communityTeamA" type="text" placeholder="Optional team name" autocomplete="off">
+            </label>
+
+            <label>
+              Kill Team
+              <select id="teamA"></select>
+            </label>
+
+            <div class="team-meta" id="teamAMeta"></div>
+          </article>
+
+          <article class="panel player-panel" data-player="b">
+            <div class="panel-title">
+              <div class="setup-player-title">
+                <h2 id="nameBLabel">Player B - milo</h2>
+                <span id="setupTeamBLabel">Plague Marines</span>
+              </div>
+              <output class="score-badge setup-vp-hidden" id="totalB">0 VP</output>
+            </div>
+
+            <label>
+              Player name
+              <input id="playerBName" type="text" value="milo" autocomplete="off">
+            </label>
+
+            <label>
+              Community team
+              <input id="communityTeamB" type="text" placeholder="Optional team name" autocomplete="off">
+            </label>
+
+            <label>
+              Kill Team
+              <select id="teamB"></select>
+            </label>
+
+            <div class="team-meta" id="teamBMeta"></div>
+          </article>
+        </section>
+
+        <section class="grid setup-mission" aria-label="Mission setup">
+          <article class="panel">
+            <div class="mission-compact-row">
+              <h2 class="mission-heading">Mission</h2>
+              <div class="mission-setup-row">
+                <label>
+                  Crit Op
+                  <select id="critOp"></select>
+                </label>
+                <label>
+                  Killzone
+                  <select id="killzone">
+                    <option value="Volkus">Volkus</option>
+                    <option value="Tomb World">Tomb World</option>
+                    <option value="Gallowdark">Gallowdark</option>
+                    <option value="Others">Others</option>
+                  </select>
+                </label>
+                <label>
+                  Map
+                  <select id="mapNumber">
+                    <option value="Map 1">Map 1</option>
+                    <option value="Map 2">Map 2</option>
+                    <option value="Map 3">Map 3</option>
+                    <option value="Map 4">Map 4</option>
+                    <option value="Map 5">Map 5</option>
+                    <option value="Map 6">Map 6</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div class="source-links" id="sourceLinks"></div>
+          </article>
+        </section>
+
+        <section class="panel setup-summary-preview" aria-label="Match summary preview">
+          <div>
+            <p class="eyebrow">Match Preview</p>
+            <h2 id="setupPreviewPlayers">maru - Angels of Death vs milo - Plague Marines</h2>
+          </div>
+          <p id="setupPreviewMission">Mission: Secure / Volkus / Map 1</p>
+        </section>
+
+        <section class="setup-start-row" aria-label="Open deploy">
+          <button id="setupGameStart" type="button">Proceed to Deploy</button>
+        </section>
+      </section>
+
+      <section class="page" id="pageDeploy" data-page="deploy" aria-label="Deploy page">
+        <section class="mission-strip deploy-strip" aria-label="Deploy overview">
+          <div class="mission-copy">
+            <p class="eyebrow">Deploy</p>
+            <h2>Tac Op & Equipment</h2>
+            <p class="hint">Lock in equipment readiness, Tac Op reveal state, and deploy sequence before starting the battle.</p>
+          </div>
+        </section>
+
+        <section class="panel deploy-initiative-panel" aria-label="Initiative selector">
+          <div>
+            <p class="eyebrow">Initiative</p>
+          </div>
+          <div class="deploy-initiative-buttons">
+            <button class="initiative-button" id="initiativeA" type="button">Player A - maru</button>
+            <button class="initiative-button" id="initiativeB" type="button">Player B - milo</button>
+          </div>
+        </section>
+
+        <section class="grid setup-ops" aria-label="Tac Op and equipment setup">
+          <article class="panel setup-op-card player-tone-a">
+            <div class="panel-title">
+              <div>
+                <p class="eyebrow">Player A</p>
+                <h2>Tac Op & Equipment</h2>
+              </div>
+            </div>
+
+            <div class="deploy-operative-row">
+              <span>Starting Operatives (valid for Kill Op)</span>
+              <input id="deployOpsA" type="number" min="5" max="14" value="6">
+            </div>
+
+            <div class="equipment-ready">
+              <span>Equipment Selection</span>
+              <button id="equipmentReadyA" type="button">Reveal</button>
+            </div>
+
+            <label>
+              Tac Op
+              <select id="tacA"></select>
+            </label>
+
+            <p class="hint" id="tacAHelp"></p>
+            <div class="tac-sealed" id="tacSealedA" hidden>
+              <strong>Sealed up - locked</strong>
+              <span>Reveal when this Tac Op is ready to score</span>
+              <button id="unlockTacA" type="button">Reveal</button>
+            </div>
+
+            <div class="equipment-ready equipment-setup-row">
+              <span>Equipment Setup</span>
+              <button id="equipmentSetupA" type="button">Ready</button>
+            </div>
+
+            <div class="deploy-plan" id="deployPlanA">
+              <div class="deploy-plan-head">
+                <span>Deploy Sequence</span>
+                <button id="deployDoneA" type="button">Done</button>
+              </div>
+              <div class="deploy-plan-slots" id="deploySlotsA"></div>
+            </div>
+
+            <div class="primary-box deploy-primary-storage" id="primaryBoxA" hidden>
+              <label>
+                Primary Op
+                <select id="primaryA">
+                  <option value="">Not selected</option>
+                  <option value="crit">Crit Op</option>
+                  <option value="kill">Kill Op</option>
+                  <option value="tac">Tac Op</option>
+                </select>
+              </label>
+              <output class="setup-vp-hidden" id="primaryAValue">Primary: 0 VP</output>
+            </div>
+            <div class="primary-sealed" id="primarySealedA" hidden>
+              <strong>Sealed up - locked</strong>
+              <button id="unlockPrimaryA" type="button">Reveal</button>
+            </div>
+          </article>
+
+          <article class="panel setup-op-card player-tone-b">
+            <div class="panel-title">
+              <div>
+                <p class="eyebrow">Player B</p>
+                <h2>Tac Op & Equipment</h2>
+              </div>
+            </div>
+
+            <div class="deploy-operative-row">
+              <span>Starting Operatives (valid for Kill Op)</span>
+              <input id="deployOpsB" type="number" min="5" max="14" value="6">
+            </div>
+
+            <div class="equipment-ready">
+              <span>Equipment Selection</span>
+              <button id="equipmentReadyB" type="button">Reveal</button>
+            </div>
+
+            <label>
+              Tac Op
+              <select id="tacB"></select>
+            </label>
+
+            <p class="hint" id="tacBHelp"></p>
+            <div class="tac-sealed" id="tacSealedB" hidden>
+              <strong>Sealed up - locked</strong>
+              <span>Reveal when this Tac Op is ready to score</span>
+              <button id="unlockTacB" type="button">Reveal</button>
+            </div>
+
+            <div class="equipment-ready equipment-setup-row">
+              <span>Equipment Setup</span>
+              <button id="equipmentSetupB" type="button">Ready</button>
+            </div>
+
+            <div class="deploy-plan" id="deployPlanB">
+              <div class="deploy-plan-head">
+                <span>Deploy Sequence</span>
+                <button id="deployDoneB" type="button">Done</button>
+              </div>
+              <div class="deploy-plan-slots" id="deploySlotsB"></div>
+            </div>
+
+            <div class="primary-box deploy-primary-storage" id="primaryBoxB" hidden>
+              <label>
+                Primary Op
+                <select id="primaryB">
+                  <option value="">Not selected</option>
+                  <option value="crit">Crit Op</option>
+                  <option value="kill">Kill Op</option>
+                  <option value="tac">Tac Op</option>
+                </select>
+              </label>
+              <output class="setup-vp-hidden" id="primaryBValue">Primary: 0 VP</output>
+            </div>
+            <div class="primary-sealed" id="primarySealedB" hidden>
+              <strong>Sealed up - locked</strong>
+              <button id="unlockPrimaryB" type="button">Reveal</button>
+            </div>
+          </article>
+        </section>
+
+        <section class="setup-start-row" aria-label="Start game">
+          <button id="deployGameStart" type="button">Battle Start</button>
+        </section>
+      </section>
+
+      <section class="page" id="pageGame" data-page="game" aria-label="Game page">
+        <input class="native-score-input" id="cpA" type="number" min="0" max="99" value="3" aria-hidden="true" tabindex="-1">
+        <input class="native-score-input" id="cpB" type="number" min="0" max="99" value="3" aria-hidden="true" tabindex="-1">
+
+        <section class="mission-strip battle-strip" aria-label="Match overview">
+          <div class="battle-column player-column player-tone-a" id="battlePlayerA"></div>
+          <div class="battle-column mission-column">
+            <p class="eyebrow" id="battleTpLabel">Turning Point - 1</p>
+            <h2 id="resultText">Set up both kill teams</h2>
+            <p id="resultDetail">Select a Crit Op, Tac Ops, and enter VP as the game progresses.</p>
+            <div id="battleMission"></div>
+          </div>
+          <div class="battle-column player-column player-tone-b" id="battlePlayerB"></div>
+          <div class="battle-log" id="battleLog" aria-label="Setup log" hidden></div>
+        </section>
+
+        <section class="game-mode-bar" aria-label="Game mode">
+          <button class="mode-tab active" id="liveModeButton" type="button" data-mode-target="live">Live Mode</button>
+          <button class="mode-tab" id="detailModeButton" type="button" data-mode-target="detail">Detail Mode</button>
+        </section>
+
+        <section class="grid" aria-label="Clock">
+          <article class="panel clock-panel">
+            <div class="panel-title">
+              <div>
+                <p class="eyebrow">Chess Clock</p>
+                <h2>Battle time</h2>
+                <p class="clock-current-turn" id="activeTurnBanner">Current turn: maru</p>
+              </div>
+              <div class="clock-controls">
+                <div class="turning-point clock-turning-point">
+                  <div class="turning-point-stepper" aria-label="Turning Point control">
+                    <button id="tpMinus" type="button" aria-label="Previous Turning Point">-</button>
+                    <output id="turningPointDisplay">TURNING POINT 1</output>
+                    <button id="tpPlus" type="button" aria-label="Next Turning Point">+</button>
+                  </div>
+                  <select id="turningPoint" class="hidden-select" aria-hidden="true" tabindex="-1">
+                    <option value="1">TP1</option>
+                    <option value="2">TP2</option>
+                    <option value="3">TP3</option>
+                    <option value="4">TP4</option>
+                  </select>
+                </div>
+                <button class="clock-toggle active" id="clockToggle" type="button" aria-pressed="true">No Clock</button>
+                <label class="time-config">
+                  Minutes
+                  <input id="clockMinutes" type="number" min="1" max="180" value="60">
+                </label>
+                <button id="startPause" type="button">Start</button>
+                <button id="resetClock" type="button">Reset</button>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section class="panel tp1-game-setup-panel" id="tp1GameSetupPanel" aria-label="Turning Point setup controls">
+          <div class="tp1-game-group">
+            <p class="eyebrow">Initiative</p>
+            <div class="tp1-initiative-buttons">
+              <button class="initiative-button" id="gameInitiativeA" type="button">Player A</button>
+              <button class="initiative-button" id="gameInitiativeB" type="button">Player B</button>
+            </div>
+          </div>
+          <div class="tp1-game-group" id="gamePrimaryGroup">
+            <p class="eyebrow">Primary Op</p>
+            <div class="tp1-primary-grid" id="gamePrimaryControls"></div>
+          </div>
+        </section>
+
+        <section class="live-mode active" id="liveModePanel" aria-label="Live match controls">
+          <section class="live-scoreboard">
+            <article class="live-player-card player-tone-a" id="liveCardA">
+              <div class="live-player-head">
+                <div>
+                  <p class="eyebrow">Player A</p>
+                  <h2 id="liveNameA">maru</h2>
+                  <p id="liveTeamA">Angels of Death</p>
+                </div>
+                <output id="liveTotalA">0 VP</output>
+              </div>
+              <div class="clock-face active" id="clockA" data-player="a">
+                <span id="clockAName">Player A</span>
+                <strong id="timeA">75:00</strong>
+                <button class="pass-turn-button" id="passTurnA" type="button">Pass Turn</button>
+              </div>
+              <div class="cp-tracker" id="liveCpA"></div>
+              <div class="live-quick-controls" id="liveQuickA"></div>
+            </article>
+
+            <article class="live-player-card player-tone-b" id="liveCardB">
+              <div class="live-player-head">
+                <div>
+                  <p class="eyebrow">Player B</p>
+                  <h2 id="liveNameB">milo</h2>
+                  <p id="liveTeamB">Plague Marines</p>
+                </div>
+                <output id="liveTotalB">0 VP</output>
+              </div>
+              <div class="clock-face" id="clockB" data-player="b">
+                <span id="clockBName">Player B</span>
+                <strong id="timeB">75:00</strong>
+                <button class="pass-turn-button" id="passTurnB" type="button">Pass Turn</button>
+              </div>
+              <div class="cp-tracker" id="liveCpB"></div>
+              <div class="live-quick-controls" id="liveQuickB"></div>
+            </article>
+          </section>
+
+          <section class="panel live-summary-panel" aria-label="Live score summary">
+            <div>
+              <p class="eyebrow">Current Score</p>
+              <h2 id="liveScoreLine">maru vs milo</h2>
+              <p id="liveScoreDetail">0 - 0</p>
+            </div>
+            <button class="wide-pass-button" id="livePassTurn" type="button">Pass Turn</button>
+          </section>
+
+          <section class="panel export-panel tp4-primary-panel" id="liveTp4PrimaryPanel" aria-label="Live TP4 primary reveal" hidden>
+            <div>
+              <p class="eyebrow">TP4 Primary</p>
+              <h2>Reveal sealed choices</h2>
+              <button id="liveEndgamePrimary" type="button">Reveal Primary choices</button>
+            </div>
+            <div class="tp4-primary-summary" id="liveTp4PrimarySummary">Primary choices are sealed.</div>
+          </section>
+        </section>
+
+        <section class="detail-mode" id="detailModePanel" aria-label="Detailed match controls">
+        <section class="panel scoring-panel" aria-label="Scoring">
+          <div class="panel-title">
+            <div>
+              <p class="eyebrow">Scoring</p>
+              <h2>Victory Points</h2>
+            </div>
+            <button id="clearScores" type="button">Clear scores</button>
+          </div>
+
+          <div class="cp-detail-grid" aria-label="Command Point tracking">
+            <div class="cp-tracker player-tone-a" id="detailCpA"></div>
+            <div class="cp-tracker player-tone-b" id="detailCpB"></div>
+          </div>
+
+          <div class="score-table-wrap">
+            <table class="score-table">
+              <thead>
+                <tr>
+                  <th rowspan="2">Player</th>
+                  <th colspan="2">TP2</th>
+                  <th colspan="2">TP3</th>
+                  <th colspan="2">TP4</th>
+                  <th rowspan="2">Kill Op</th>
+                  <th rowspan="2">Primary</th>
+                  <th rowspan="2">Ruling / Other</th>
+                </tr>
+                <tr>
+                  <th>Crit</th>
+                  <th>Tac</th>
+                  <th>Crit</th>
+                  <th>Tac</th>
+                  <th>Crit</th>
+                  <th>Tac</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="player-tone-a" data-score-row="a">
+                  <th id="scoreNameA">Player A</th>
+                  <td><input type="number" min="0" max="3" value="0" data-score="a.crit.1"></td>
+                  <td><input type="number" min="0" max="6" value="0" data-score="a.tac.1"></td>
+                  <td><input type="number" min="0" max="3" value="0" data-score="a.crit.2"></td>
+                  <td><input type="number" min="0" max="6" value="0" data-score="a.tac.2"></td>
+                  <td><input type="number" min="0" max="3" value="0" data-score="a.crit.3"></td>
+                  <td><input type="number" min="0" max="6" value="0" data-score="a.tac.3"></td>
+                  <td><input id="killVpA" type="number" min="0" max="6" value="0" data-score="a.kill" readonly></td>
+                  <td><output id="primaryScoreA">0</output></td>
+                  <td><input type="number" min="-20" max="20" value="0" data-score="a.other"></td>
+                </tr>
+                <tr class="player-tone-b" data-score-row="b">
+                  <th id="scoreNameB">Player B</th>
+                  <td><input type="number" min="0" max="3" value="0" data-score="b.crit.1"></td>
+                  <td><input type="number" min="0" max="6" value="0" data-score="b.tac.1"></td>
+                  <td><input type="number" min="0" max="3" value="0" data-score="b.crit.2"></td>
+                  <td><input type="number" min="0" max="6" value="0" data-score="b.tac.2"></td>
+                  <td><input type="number" min="0" max="3" value="0" data-score="b.crit.3"></td>
+                  <td><input type="number" min="0" max="6" value="0" data-score="b.tac.3"></td>
+                  <td><input id="killVpB" type="number" min="0" max="6" value="0" data-score="b.kill" readonly></td>
+                  <td><output id="primaryScoreB">0</output></td>
+                  <td><input type="number" min="-20" max="20" value="0" data-score="b.other"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="tp-accordion" id="tpAccordion" aria-label="Turning Point scoring cards"></div>
+
+          <section class="panel export-panel tp4-primary-panel" id="tp4PrimaryPanel" aria-label="TP4 primary reveal" hidden>
+            <div>
+              <p class="eyebrow">TP4 Primary</p>
+              <h2>Reveal sealed choices</h2>
+              <button id="endgamePrimary" type="button">Reveal Primary choices</button>
+            </div>
+            <div class="tp4-primary-summary" id="tp4PrimarySummary">Primary choices are sealed.</div>
+          </section>
+
+          <div class="kill-helper">
+            <label class="kill-helper-field player-tone-a">
+              Player A starting enemy operatives
+              <input class="compact-number" id="startEnemiesA" type="number" min="5" max="14" value="6">
+            </label>
+            <label class="kill-helper-field player-tone-a">
+              Player A enemy operatives incapacitated
+              <input id="killsA" type="number" min="0" max="30" value="0">
+            </label>
+            <label class="kill-helper-field player-tone-b">
+              Player B starting enemy operatives
+              <input class="compact-number" id="startEnemiesB" type="number" min="5" max="14" value="6">
+            </label>
+            <label class="kill-helper-field player-tone-b">
+              Player B enemy operatives incapacitated
+              <input class="compact-number" id="killsB" type="number" min="0" max="30" value="0">
+            </label>
+            <label class="match-notes-field">
+              Match notes / rulings
+              <textarea id="matchNotes" rows="3" placeholder="Record ignored operatives, tournament rulings, terrain notes, or future errata calls."></textarea>
+            </label>
+          </div>
+
+          <div class="summary-table-wrap">
+            <table class="summary-table">
+              <thead>
+                <tr>
+                  <th>VP Type</th>
+                  <th>Player A</th>
+                  <th>Player B</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th>Crit Op total VP</th>
+                  <td><output id="critSummaryA">0VP</output></td>
+                  <td><output id="critSummaryB">0VP</output></td>
+                </tr>
+                <tr>
+                  <th>Tac Op total VP</th>
+                  <td><output id="tacSummaryA">0VP</output></td>
+                  <td><output id="tacSummaryB">0VP</output></td>
+                </tr>
+                <tr>
+                  <th>Kill Op / Kill Grade</th>
+                  <td><output id="killGradeA">Kill Grade 0 - 0VP</output></td>
+                  <td><output id="killGradeB">Kill Grade 0 - 0VP</output></td>
+                </tr>
+                <tr>
+                  <th>Total VP</th>
+                  <td><output id="totalCompareA">0VP</output></td>
+                  <td><output id="totalCompareB">0VP</output></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p class="hint">Crit Op and Tac Op scoring starts from TP2. Kill Op VP is manual by design: record kills here, then enter the official Kill Op VP after checking ignored operatives and current app/PDF wording. Primary VP is half of the chosen Crit/Kill/Tac VP, rounded up.</p>
+        </section>
+        </section>
+
+        <section class="game-end-row" aria-label="End game">
+          <button id="gameEndButton" type="button">End Game</button>
+        </section>
+      </section>
+
+      <section class="page" id="pageEndgame" data-page="endgame" aria-label="Endgame page">
+        <section class="mission-strip endgame-summary-strip" aria-label="Final overview">
+          <div class="mission-copy endgame-summary-copy">
+            <p class="eyebrow">Endgame</p>
+            <h2 id="endgameVictoryText">Draw</h2>
+            <p id="endgameResultText">maru vs milo</p>
+            <p id="endgameResultDetail">0 - 0</p>
+          </div>
+        </section>
+
+        <section class="panel export-panel tp4-primary-panel endgame-primary-panel" id="endgamePrimaryPanel" aria-label="Endgame primary reveal" hidden>
+          <div>
+            <p class="eyebrow">Primary</p>
+            <h2>Reveal sealed choices</h2>
+            <button id="endgamePrimaryReveal" type="button">Reveal Primary choices</button>
+          </div>
+          <div class="tp4-primary-summary" id="endgamePrimarySummary">Primary choices are sealed.</div>
+        </section>
+
+        <section class="game-end-row" aria-label="Open battle report">
+          <button id="openBattleReportPage" type="button">Battle Report</button>
+        </section>
+      </section>
+
+      <section class="page" id="pageReport" data-page="report" aria-label="Battle report page">
+        <section class="mission-strip report-overview-strip" aria-label="Battle report overview">
+          <div class="mission-copy">
+            <p class="eyebrow">Battle Report</p>
+            <h2>Match Summary</h2>
+            <p class="hint">Clean post-game summary for WhatsApp, Discord, CSV export, or records.</p>
+          </div>
+        </section>
+
+        <section class="panel export-panel" aria-label="Battle report controls">
+          <div>
+            <p class="eyebrow">Actions</p>
+            <h2>Share & Export</h2>
+            <p class="hint">Creates a clear match summary with teams, ops, scoring by turning point, kills, CP, clock, and notes.</p>
+          </div>
+          <div class="report-button-row">
+            <button id="battleReportButton" type="button">Generate Report</button>
+            <button id="copyBattleReportButton" type="button">Copy Summary</button>
+            <button id="reportExportCsv" type="button">Export CSV</button>
+          </div>
+        </section>
+
+        <section class="panel battle-report-panel" id="battleReportPanel" aria-label="Battle report">
+          <div id="battleReport"></div>
+        </section>
+
+        <section class="mobile-report-actions" aria-label="Mobile report actions">
+          <button id="stickyCopyBattleReport" type="button">Copy Summary</button>
+          <button id="stickyExportCsv" type="button">Export CSV</button>
+        </section>
+      </section>
+
+      <footer class="site-credit">
+        <strong>Created by Maru and Milo, (Hong Kong)</strong>
+        <span>This is an unofficial personal-use fan scoreboard. Kill Team, Warhammer, and related names are trademarks of Games Workshop. Always check the official app and downloads for current rules.</span>
+      </footer>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

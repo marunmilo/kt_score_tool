@@ -1,0 +1,106 @@
+{
+  "rulesVersion": {
+    "name": "Kill Team 3rd Edition - Approved Ops 2025 live baseline",
+    "checkedDate": "2026-06-05",
+    "notes": [
+      "Uses official Warhammer Community downloads and the Kill Team app as living-rule references.",
+      "Approved Ops update log includes April 2026 errata for Dominate, Sweep and Clear, and earlier Crit/Tac Op changes.",
+      "Score prompts are short aids, not full official rules text."
+    ],
+    "sources": [
+      {
+        "label": "Warhammer Community Kill Team downloads",
+        "url": "https://www.warhammer-community.com/en-gb/downloads/kill-team/"
+      },
+      {
+        "label": "Approved Ops 2025 Tournament Companion",
+        "url": "https://assets.warhammer-community.com/eng_28-01_kill_team_key_downloads_approved_ops_2025_tournament_companion-ow1mucx9p1-jk7rmolmfe.pdf"
+      },
+      {
+        "label": "Approved Ops April 2026 update log",
+        "url": "https://assets.warhammer-community.com/eng_29-04_kill_team_key_downloads_approved_ops_update_log-ojpqmwjxda-z4rtrjne3n.pdf"
+      }
+    ]
+  },
+  "archetypes": [
+    "Recon",
+    "Security",
+    "Seek and Destroy",
+    "Infiltration"
+  ],
+  "killTeams": [
+    { "name": "Angels of Death", "faction": "Adeptus Astartes", "classified": true, "archetypes": ["Seek and Destroy", "Security"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Battleclade", "faction": "Adeptus Mechanicus", "classified": true, "archetypes": ["Recon", "Infiltration"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Blades of Khaine", "faction": "Aeldari", "classified": true, "archetypes": ["Seek and Destroy", "Security", "Recon", "Infiltration"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Blooded", "faction": "Chaos", "classified": true, "archetypes": ["Seek and Destroy", "Infiltration"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Brood Brothers", "faction": "Genestealer Cults", "classified": true, "archetypes": ["Security", "Infiltration"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Canoptek Circle", "faction": "Necrons", "classified": true, "archetypes": ["Security", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Celestian Insidiants", "faction": "Adepta Sororitas", "classified": true, "archetypes": ["Seek and Destroy", "Security"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Chaos Cult", "faction": "Chaos", "classified": true, "archetypes": ["Seek and Destroy", "Infiltration"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Corsair Voidscarred", "faction": "Aeldari", "classified": true, "archetypes": ["Recon", "Infiltration"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Death Korps", "faction": "Astra Militarum", "classified": true, "archetypes": ["Seek and Destroy", "Security"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Deathwatch", "faction": "Adeptus Astartes", "classified": true, "archetypes": ["Seek and Destroy", "Security"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Elucidian Starstriders", "faction": "Imperial Agents", "classified": true, "archetypes": ["Security", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Exaction Squad", "faction": "Imperial Agents", "classified": true, "archetypes": ["Seek and Destroy", "Security"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Farstalker Kinband", "faction": "T'au Empire", "classified": true, "archetypes": ["Recon", "Infiltration"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Fellgor Ravagers", "faction": "Chaos", "classified": true, "archetypes": ["Seek and Destroy", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Gellerpox Infected", "faction": "Chaos", "classified": true, "archetypes": ["Seek and Destroy", "Security"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Goremongers", "faction": "Chaos", "classified": true, "archetypes": ["Seek and Destroy", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Hand of the Archon", "faction": "Drukhari", "classified": true, "archetypes": ["Seek and Destroy", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Hearthkyn Salvagers", "faction": "Leagues of Votann", "classified": true, "archetypes": ["Security", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Hernkyn Yaegirs", "faction": "Leagues of Votann", "classified": true, "archetypes": ["Seek and Destroy", "Infiltration"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Hierotek Circle", "faction": "Necrons", "classified": true, "archetypes": ["Security", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Hunter Clade", "faction": "Adeptus Mechanicus", "classified": true, "archetypes": ["Seek and Destroy", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Imperial Navy Breachers", "faction": "Imperial Agents", "classified": true, "archetypes": ["Seek and Destroy", "Security"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Inquisitorial Agents", "faction": "Imperial Agents", "classified": true, "archetypes": ["Seek and Destroy", "Security", "Recon", "Infiltration"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Kasrkin", "faction": "Astra Militarum", "classified": true, "archetypes": ["Seek and Destroy", "Security"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Kommandos", "faction": "Orks", "classified": true, "archetypes": ["Seek and Destroy", "Infiltration"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Legionaries", "faction": "Chaos Space Marines", "classified": true, "archetypes": ["Seek and Destroy", "Security"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Mandrakes", "faction": "Drukhari", "classified": true, "archetypes": ["Recon", "Infiltration"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Murderwing", "faction": "Aeldari", "classified": true, "archetypes": ["Seek and Destroy", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Nemesis Claw", "faction": "Chaos Space Marines", "classified": true, "archetypes": ["Seek and Destroy", "Infiltration"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Novitiates", "faction": "Adepta Sororitas", "classified": true, "archetypes": ["Security", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Pathfinders", "faction": "T'au Empire", "classified": true, "archetypes": ["Infiltration", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Phobos Strike Team", "faction": "Adeptus Astartes", "classified": true, "archetypes": ["Infiltration", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Plague Marines", "faction": "Death Guard", "classified": true, "archetypes": ["Seek and Destroy", "Security"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Ratlings", "faction": "Astra Militarum", "classified": true, "archetypes": ["Security", "Infiltration"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Raveners", "faction": "Tyranids", "classified": true, "archetypes": ["Seek and Destroy", "Infiltration"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Sanctifiers", "faction": "Adepta Sororitas", "classified": true, "archetypes": ["Seek and Destroy", "Security"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Scout Squad", "faction": "Adeptus Astartes", "classified": true, "archetypes": ["Infiltration", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Spectre Squad", "faction": "T'au Empire", "classified": true, "archetypes": ["Infiltration", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Strike Force Variel", "faction": "Adeptus Astartes", "classified": true, "archetypes": ["Seek and Destroy", "Infiltration"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Tempestus Aquilon", "faction": "Astra Militarum", "classified": true, "archetypes": ["Seek and Destroy", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Vespid Stingwings", "faction": "T'au Empire", "classified": true, "archetypes": ["Seek and Destroy", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Void-Dancer Troupe", "faction": "Aeldari", "classified": true, "archetypes": ["Infiltration", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Warp Coven", "faction": "Thousand Sons", "classified": true, "archetypes": ["Security", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Wolf Scouts", "faction": "Adeptus Astartes", "classified": true, "archetypes": ["Seek and Destroy", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Wrecka Krew", "faction": "Orks", "classified": true, "archetypes": ["Seek and Destroy", "Security"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "Wyrmblade", "faction": "Genestealer Cults", "classified": true, "archetypes": ["Seek and Destroy", "Infiltration"], "notes": "Tac Op archetypes updated from player-verified faction reference." },
+    { "name": "XV26 Stealth Battlesuits", "faction": "T'au Empire", "classified": true, "archetypes": ["Infiltration", "Recon"], "notes": "Tac Op archetypes updated from player-verified faction reference." }
+  ],
+  "tacOps": [
+    { "name": "Flank", "archetype": "Recon", "maxVp": 6, "prompt": "Track flank control from TP2 onward. April/January updates clarify flank contesting and TP4 scoring." },
+    { "name": "Retrieval", "archetype": "Recon", "maxVp": 6, "prompt": "Track Retrieve actions and carried retrieval markers. January update restricts first-turn and engagement use." },
+    { "name": "Scout Enemy Movement", "archetype": "Recon", "maxVp": 6, "prompt": "Track monitored enemy operatives from TP2 onward." },
+    { "name": "Envoy", "archetype": "Security", "maxVp": 6, "prompt": "Choose a different Envoy each eligible turning point; track territory and wound condition." },
+    { "name": "Plant Banner", "archetype": "Security", "maxVp": 6, "prompt": "Track banner placement, whether it remains in enemy territory, and contesting." },
+    { "name": "Martyrs", "archetype": "Security", "maxVp": 6, "prompt": "Track first incapacitation on objectives; April commentary confirms unusual incapacitation sources." },
+    { "name": "Rout", "archetype": "Seek and Destroy", "maxVp": 6, "prompt": "Track qualifying incapacitations near the opponent's drop zone." },
+    { "name": "Sweep and Clear", "archetype": "Seek and Destroy", "maxVp": 6, "prompt": "Track cleared objective markers and Swept tokens. April update changes VP wording." },
+    { "name": "Dominate", "archetype": "Seek and Destroy", "maxVp": 6, "prompt": "Track Dominate tokens on qualifying incapacitations. April update changes token gain for 12+ wound operatives." },
+    { "name": "Track Enemy", "archetype": "Infiltration", "maxVp": 6, "prompt": "Track concealed friendly operatives near enemies who cannot target them." },
+    { "name": "Plant Devices", "archetype": "Infiltration", "maxVp": 6, "prompt": "Track device tokens planted on objectives and enemy contesting." },
+    { "name": "Steal Intelligence", "archetype": "Infiltration", "maxVp": 6, "prompt": "Track Intelligence markers dropped by incapacitated enemy operatives and carried by your operatives." }
+  ],
+  "critOps": [
+    { "name": "Secure", "group": "1. Secure / 2. Loot / 3. Transmission", "maxVp": 8, "prompt": "Core objective-control pattern. Score by turning point using the official card/app wording." },
+    { "name": "Loot", "group": "1. Secure / 2. Loot / 3. Transmission", "maxVp": 8, "prompt": "Core objective interaction pattern. Score by turning point using the official card/app wording." },
+    { "name": "Transmission", "group": "1. Secure / 2. Loot / 3. Transmission", "maxVp": 8, "prompt": "Core objective interaction pattern. Score by turning point using the official card/app wording." },
+    { "name": "Orb", "group": "4. Orb / 6. Energy Cells / 7. Download", "maxVp": 8, "prompt": "Track the Orb marker location and objective control from TP2 onward." },
+    { "name": "Stake Claim", "group": "5. Stake Claim / 8. Data / 9. Reboot", "maxVp": 8, "prompt": "Select and resolve claimed objectives from TP2 onward. Update log changes timing wording." },
+    { "name": "Energy Cells", "group": "4. Orb / 6. Energy Cells / 7. Download", "maxVp": 8, "prompt": "Track carried objective markers and control from TP2 onward. Update log changes timing wording." },
+    { "name": "Download", "group": "4. Orb / 6. Energy Cells / 7. Download", "maxVp": 8, "prompt": "Track Download actions and objective control in later turning points." },
+    { "name": "Data", "group": "5. Stake Claim / 8. Data / 9. Reboot", "maxVp": 8, "prompt": "Track Data objective requirements by turning point using the official card/app wording." },
+    { "name": "Reboot", "group": "5. Stake Claim / 8. Data / 9. Reboot", "maxVp": 8, "prompt": "Track Reboot objective requirements by turning point using the official card/app wording." }
+  ]
+}
