@@ -1776,7 +1776,11 @@ function compactTpLine(row) {
   const [tp, aCrit, aTac, aKill, bCrit, bTac, bKill] = row;
   const aTotal = scoreNumber(aCrit) + scoreNumber(aTac) + scoreNumber(aKill);
   const bTotal = scoreNumber(bCrit) + scoreNumber(bTac) + scoreNumber(bKill);
-  return `${tp}: ${playerName("a")} CO ${aCrit} / TO ${aTac} / KO ${aKill} / VP ${aTotal} | ${playerName("b")} CO ${bCrit} / TO ${bTac} / KO ${bKill} / VP ${bTotal}`;
+  return [
+    `${tp}:`,
+    `${playerName("a")} CO ${aCrit} / TO ${aTac} / KO ${aKill} / VP ${aTotal} |`,
+    `${playerName("b")} CO ${bCrit} / TO ${bTac} / KO ${bKill} / VP ${bTotal}`
+  ].join("\n");
 }
 
 function otherVpLine(player) {
@@ -1919,6 +1923,14 @@ function playerReportLine(player) {
   ].filter(Boolean).join("\n");
 }
 
+function playerTeamReportLine(player) {
+  return `${playerName(player)} - ${reportTeamLabel(player)}`;
+}
+
+function reportComparisonLine(label, valueA, valueB) {
+  return `${label}: ${playerName("a")} ${valueA} ${playerName("b")} ${valueB}`;
+}
+
 function reportPlayerCard(player) {
   const label = playerLabel(player);
   const kill = killOpDetails(player);
@@ -1960,18 +1972,38 @@ function battleReportWhatsappText() {
   const crit = selectedCrit();
   const notes = $("matchNotes").value.trim();
   const tpLines = tpReportRows().map(compactTpLine);
-
-  return [
-    `${playerName("a")} ${sumScore("a")} - ${sumScore("b")} ${playerName("b")}`,
+  const killA = killOpDetails("a");
+  const killB = killOpDetails("b");
+  const otherA = Number(state.scores.a.other || 0);
+  const otherB = Number(state.scores.b.other || 0);
+  const lines = [
+    `${playerName("a")} ${sumScore("a")} - ${playerName("b")} ${sumScore("b")}`,
     `${reportTeamName("a")} - ${reportTeamName("b")}`,
     reportWinnerText(),
     "",
     `Mission: ${crit?.name || "Not selected"} / ${$("killzone").value} / ${$("mapNumber").value}`,
     `TP: ${$("turningPoint").value}`,
     "",
-    playerReportLine("a"),
-    "",
-    playerReportLine("b"),
+    playerTeamReportLine("a"),
+    playerTeamReportLine("b"),
+    `${playerName("a")} TO: ${reportTacLabel("a")}`,
+    `${playerName("b")} TO: ${reportTacLabel("b")}`,
+    `${playerName("a")} Primary: ${exportedPrimaryLabel("a")}`,
+    `${playerName("b")} Primary: ${exportedPrimaryLabel("b")}`,
+    reportComparisonLine("CO", vpLabel(scoreTotal("a", "crit")), vpLabel(scoreTotal("b", "crit"))),
+    reportComparisonLine("TO VP", vpLabel(scoreTotal("a", "tac")), vpLabel(scoreTotal("b", "tac"))),
+    reportComparisonLine("KO", vpLabel(state.scores.a.kill), vpLabel(state.scores.b.kill)),
+    reportComparisonLine("Primary VP", vpLabel(exportedPrimaryScore("a") || 0), vpLabel(exportedPrimaryScore("b") || 0))
+  ];
+
+  if (otherA || otherB) {
+    lines.push(reportComparisonLine("Other", vpLabel(otherA), vpLabel(otherB)));
+  }
+
+  lines.push(
+    reportComparisonLine("Total", vpLabel(sumScore("a")), vpLabel(sumScore("b"))),
+    reportComparisonLine("KG", killA.grade, killB.grade),
+    reportComparisonLine("Incap", killA.kills, killB.kills),
     "",
     "TP Breakdown:",
     ...tpLines,
@@ -1980,100 +2012,27 @@ function battleReportWhatsappText() {
     notes || "No notes recorded.",
     "",
     `Generated: ${new Date().toLocaleString()}`
-  ].join("\n");
+  );
+
+  return lines.join("\n");
+}
+
+function reportTextBlock() {
+  const block = document.createElement("section");
+  block.className = "report-text-block";
+  const title = document.createElement("h3");
+  title.textContent = "Share Summary";
+  const text = document.createElement("pre");
+  text.textContent = battleReportWhatsappText();
+  block.append(title, text);
+  return block;
 }
 
 function generateBattleReport() {
   tickClock();
   const report = $("battleReport");
   const panel = $("battleReportPanel");
-  const crit = selectedCrit();
-  const notes = $("matchNotes").value.trim();
-  const teamA = selectedTeam("a");
-  const teamB = selectedTeam("b");
-  const totalA = sumScore("a");
-  const totalB = sumScore("b");
-
-  const summaryCard = document.createElement("section");
-  summaryCard.className = `report-summary-card ${totalA > totalB ? "winner-a" : totalB > totalA ? "winner-b" : "winner-draw"}`;
-  const score = document.createElement("h2");
-  score.className = "report-final-score";
-  score.innerHTML = `<span class="score-a">${playerName("a")} ${totalA}</span><span>-</span><span class="score-b">${totalB} ${playerName("b")}</span>`;
-  const teamLine = document.createElement("p");
-  teamLine.className = "report-team-line";
-  teamLine.textContent = `${reportTeamName("a")} - ${reportTeamName("b")}`;
-  const winner = document.createElement("p");
-  winner.className = "report-winner";
-  winner.textContent = reportWinnerText();
-  const facts = document.createElement("div");
-  facts.className = "report-summary-facts";
-  facts.append(
-    reportDetail("Mission", crit?.name || "Not selected"),
-    reportDetail("Killzone", $("killzone").value),
-    reportDetail("Map", $("mapNumber").value),
-    reportDetail("Generated", new Date().toLocaleString())
-  );
-  summaryCard.append(score, teamLine, winner, facts);
-
-  const playerGrid = document.createElement("div");
-  playerGrid.className = "report-player-grid";
-  playerGrid.append(reportPlayerCard("a"), reportPlayerCard("b"));
-
-  const tpTable = makeReportTable(
-    ["TP", `${playerName("a")} CO`, `${playerName("a")} TO`, `${playerName("a")} KO`, `${playerName("a")} VP`, `${playerName("b")} CO`, `${playerName("b")} TO`, `${playerName("b")} KO`, `${playerName("b")} VP`],
-    formattedTpReportRows(),
-    "tp-report-table"
-  );
-  const tpSection = document.createElement("section");
-  tpSection.className = "report-section report-tp-section";
-  const tpTitle = document.createElement("h3");
-  tpTitle.textContent = "VP Break Down Table";
-  const tpCards = document.createElement("div");
-  tpCards.className = "report-tp-accordion";
-  tpReportRows().forEach((row) => {
-    const [tp, aCrit, aTac, aKill, bCrit, bTac, bKill] = row;
-    const details = document.createElement("details");
-    details.className = "report-tp-card";
-    details.open = true;
-    const summary = document.createElement("summary");
-    summary.textContent = tp;
-    const body = document.createElement("div");
-    body.className = "report-tp-card-body";
-    body.append(
-      reportDetail(playerName("a"), `CO ${aCrit} / TO ${aTac} / KO ${aKill} / VP ${scoreNumber(aCrit) + scoreNumber(aTac) + scoreNumber(aKill)}`, "player-a-text"),
-      reportDetail(playerName("b"), `CO ${bCrit} / TO ${bTac} / KO ${bKill} / VP ${scoreNumber(bCrit) + scoreNumber(bTac) + scoreNumber(bKill)}`, "player-b-text")
-    );
-    details.append(summary, body);
-    tpCards.append(details);
-  });
-  const formattedRows = formattedTpReportRows();
-  const totalRow = formattedRows[formattedRows.length - 1];
-  if (totalRow) {
-    const details = document.createElement("details");
-    details.className = "report-tp-card report-tp-total-card";
-    details.open = true;
-    const summary = document.createElement("summary");
-    summary.textContent = "Total";
-    const body = document.createElement("div");
-    body.className = "report-tp-card-body";
-    body.append(
-      reportDetail(playerName("a"), `CO ${totalRow[1]} / TO ${totalRow[2]} / KO ${totalRow[3]} / VP ${totalRow[4]}`, "player-a-text"),
-      reportDetail(playerName("b"), `CO ${totalRow[5]} / TO ${totalRow[6]} / KO ${totalRow[7]} / VP ${totalRow[8]}`, "player-b-text")
-    );
-    details.append(summary, body);
-    tpCards.append(details);
-  }
-  tpSection.append(tpTitle, tpTable, tpCards);
-
-  const notesBlock = document.createElement("section");
-  notesBlock.className = "report-notes";
-  const notesTitle = document.createElement("h3");
-  notesTitle.textContent = "Notes / Rulings";
-  const notesText = document.createElement("p");
-  notesText.textContent = notes || "No notes recorded.";
-  notesBlock.append(notesTitle, notesText);
-
-  report.replaceChildren(summaryCard, playerGrid, tpSection, notesBlock);
+  report.replaceChildren(reportTextBlock());
   panel.hidden = false;
 }
 
