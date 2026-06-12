@@ -29,6 +29,18 @@
         <button class="page-tab" type="button" data-page-target="report">Battle Report</button>
       </nav>
 
+      <section class="panel autosave-restore-panel" id="autosaveRestorePanel" aria-label="Restore autosaved match" hidden>
+        <div>
+          <p class="eyebrow">Autosave</p>
+          <h2>Previous match found</h2>
+          <p class="hint" id="autosaveRestoreText">Restore your last local match state.</p>
+        </div>
+        <div class="autosave-actions">
+          <button id="restoreAutosaveButton" type="button">Restore</button>
+          <button id="dismissAutosaveButton" type="button">Dismiss</button>
+        </div>
+      </section>
+
       <section class="page active" id="pageSetup" data-page="setup" aria-label="Setup page">
         <section class="setup-date-strip" aria-label="Match date">
           <span>Match Date</span>
@@ -131,6 +143,19 @@
             <h2 id="setupPreviewPlayers">maru - Angels of Death vs milo - Plague Marines</h2>
           </div>
           <p id="setupPreviewMission">Mission: Secure / Volkus / Map 1</p>
+        </section>
+
+        <section class="panel online-room-panel" aria-label="Online game room">
+          <div>
+            <p class="eyebrow">Online Room</p>
+            <h2>Create Online Game</h2>
+            <p class="hint">Offline mode stays active. Realtime sync needs Firebase config before this room can go live.</p>
+          </div>
+          <div class="online-room-actions">
+            <button id="createOnlineGame" type="button">Create Online Game</button>
+            <output id="onlineGameStatus">Local offline match</output>
+          </div>
+          <div class="online-link-grid" id="onlineJoinLinks" hidden></div>
         </section>
 
         <section class="setup-start-row" aria-label="Open deploy">
@@ -356,6 +381,27 @@
         </section>
 
         <section class="live-mode active" id="liveModePanel" aria-label="Live match controls">
+          <section class="panel live-hud-panel" aria-label="Live match HUD">
+            <div class="live-hud-top">
+              <div>
+                <p class="eyebrow">Live HUD</p>
+                <h2 id="hudTpLine">TP1</h2>
+              </div>
+              <div class="hud-initiative" id="hudInitiative">Initiative: Not selected</div>
+            </div>
+            <div class="live-hud-grid">
+              <article class="hud-player player-tone-a" id="hudPlayerA"></article>
+              <article class="hud-player player-tone-b" id="hudPlayerB"></article>
+            </div>
+            <div class="hud-quick-actions" aria-label="Quick scoring">
+              <button data-hud-action="crit" type="button">+ Crit</button>
+              <button data-hud-action="tac" type="button">+ Tac</button>
+              <button data-hud-action="kill" type="button">+ Kill</button>
+              <button data-hud-action="cp" type="button">+ CP</button>
+              <button data-hud-action="more" type="button">More</button>
+            </div>
+          </section>
+
           <section class="live-scoreboard">
             <article class="live-player-card player-tone-a" id="liveCardA">
               <div class="live-player-head">
@@ -553,6 +599,14 @@
         <section class="game-end-row" aria-label="End game">
           <button id="gameEndButton" type="button">End Game</button>
         </section>
+
+        <section class="mobile-live-actions" aria-label="Mobile live quick actions">
+          <button data-hud-action="crit" type="button">+Crit</button>
+          <button data-hud-action="tac" type="button">+Tac</button>
+          <button data-hud-action="kill" type="button">+Kill</button>
+          <button data-hud-action="cp" type="button">CP</button>
+          <button data-hud-action="more" type="button">More</button>
+        </section>
       </section>
 
       <section class="page" id="pageEndgame" data-page="endgame" aria-label="Endgame page">
@@ -601,6 +655,9 @@
           <div class="report-button-row">
             <button id="battleReportButton" type="button">Generate Report</button>
             <button id="copyBattleReportButton" type="button">Copy Summary</button>
+            <button id="copyMarkdownReport" type="button">Copy Markdown</button>
+            <button id="copyDiscordReport" type="button">Copy Discord</button>
+            <button id="exportReportImage" type="button">Export Image</button>
             <button id="reportExportCsv" type="button">Export CSV</button>
           </div>
         </section>

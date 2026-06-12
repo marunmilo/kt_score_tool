@@ -211,11 +211,100 @@ const state = {
     lastTick: null,
     timer: null
   },
+  endTpChecks: {
+    1: {},
+    2: {},
+    3: {},
+    4: {}
+  },
+  activity: [],
+  undoStack: [],
+  online: {
+    gameId: "",
+    links: null,
+    enabled: false
+  },
   gameMode: "live",
   page: "setup"
 };
 
 const $ = (id) => document.getElementById(id);
+const AUTOSAVE_KEY = "killTeamScoreTool.autosave.v1";
+let appReady = false;
+let suppressHistory = false;
+let autosaveTimer = null;
+
+function runWithoutHistory(callback) {
+  const previous = suppressHistory;
+  suppressHistory = true;
+  try {
+    return callback();
+  } finally {
+    suppressHistory = previous;
+  }
+}
+
+function displayValue(value) {
+  if (value === undefined || value === null || value === "") return "Not set";
+  return String(value);
+}
+
+function recordActivity(actor, action, oldValue, newValue, undo) {
+  if (!appReady || suppressHistory) return;
+  const item = {
+    time: new Date().toLocaleTimeString(),
+    actor,
+    action,
+    oldValue: displayValue(oldValue),
+    newValue: displayValue(newValue)
+  };
+  state.activity.unshift(item);
+  state.activity = state.activity.slice(0, 80);
+  if (typeof undo === "function") {
+    state.undoStack.push(undo);
+    state.undoStack = state.undoStack.slice(-50);
+  }
+  renderActivityLog();
+  scheduleAutosave();
+}
+
+function renderActivityLog() {
+  const log = $("activityLog");
+  if (!log) return;
+  const entries = state.activity.slice(0, 12);
+  if (!entries.length) {
+    const empty = document.createElement("li");
+    empty.className = "activity-empty";
+    empty.textContent = "No actions yet.";
+    log.replaceChildren(empty);
+    return;
+  }
+  log.replaceChildren(...entries.map((entry) => {
+    const item = document.createElement("li");
+    item.innerHTML = `<time>${entry.time}</time><strong>${entry.actor}</strong><span>${entry.action}: ${entry.oldValue} -> ${entry.newValue}</span>`;
+    return item;
+  }));
+}
+
+function undoLastAction() {
+  const undo = state.undoStack.pop();
+  if (!undo) {
+    alert("No action to undo.");
+    return;
+  }
+  runWithoutHistory(() => undo());
+  state.activity.unshift({
+    time: new Date().toLocaleTimeString(),
+    actor: "System",
+    action: "Undo last action",
+    oldValue: "",
+    newValue: "Applied"
+  });
+  state.activity = state.activity.slice(0, 80);
+  renderActivityLog();
+  refreshAfterStateChange();
+  saveAutosaveNow();
+}
 
 function option(value, label) {
   const element = document.createElement("option");
@@ -357,11 +446,20 @@ function adjustLiveKills(player, tpIndex, delta) {
     index === tpIndex ? total : total + Number(value || 0)
   ), 0);
   const maxForThisTp = Math.max(0, maxKillsForPlayer(player) - otherKills);
-  state.liveKillsByTp[player][tpIndex] = clampNumber(
+  const oldValue = Number(state.liveKillsByTp[player][tpIndex] || 0);
+  const nextValue = clampNumber(
     Number(state.liveKillsByTp[player][tpIndex] || 0) + delta,
     0,
     maxForThisTp
   );
+  state.liveKillsByTp[player][tpIndex] = nextValue;
+  if (oldValue !== nextValue) {
+    recordActivity(playerName(player), `TP${tpIndex + 1} enemy incapacitations`, oldValue, nextValue, () => {
+      state.liveKillsByTp[player][tpIndex] = oldValue;
+      syncLiveKillsToInputs();
+      updateKillOpScores();
+    });
+  }
   syncLiveKillsToInputs();
   updateKillOpScores();
   renderLiveQuickControls();
@@ -504,6 +602,165 @@ function syncStepperDisplays() {
   updateLiveMode();
 }
 
+function collectFormValues() {
+  const values = {};
+  document.querySelectorAll("input, select, textarea").forEach((field) => {
+    if (!field.id) return;
+    values[field.id] = field.type === "checkbox" ? field.checked : field.value;
+  });
+  return values;
+}
+
+function applyFormValues(values = {}) {
+  Object.entries(values).forEach(([id, value]) => {
+    const field = $(id);
+    if (!field) return;
+    if (field.type === "checkbox") {
+      field.checked = Boolean(value);
+    } else {
+      field.value = value;
+    }
+  });
+}
+
+function serializableState() {
+  return {
+    scores: state.scores,
+    primary: state.primary,
+    tacOps: state.tacOps,
+    equipment: state.equipment,
+    equipmentSetup: state.equipmentSetup,
+    deployDone: state.deployDone,
+    initiative: state.initiative,
+    liveKillsByTp: state.liveKillsByTp,
+    cp: state.cp,
+    endTpChecks: state.endTpChecks,
+    activity: state.activity,
+    online: state.online,
+    gameMode: state.gameMode,
+    page: state.page,
+    clock: {
+      featureHidden: state.clock.featureHidden,
+      enabled: state.clock.enabled,
+      active: state.clock.active,
+      running: false,
+      remaining: state.clock.remaining,
+      lastTick: null
+    }
+  };
+}
+
+function applySerializableState(saved = {}) {
+  [
+    "scores",
+    "primary",
+    "tacOps",
+    "equipment",
+    "equipmentSetup",
+    "deployDone",
+    "initiative",
+    "liveKillsByTp",
+    "cp",
+    "endTpChecks",
+    "activity",
+    "online",
+    "gameMode",
+    "page"
+  ].forEach((key) => {
+    if (saved[key] !== undefined) state[key] = saved[key];
+  });
+  if (saved.clock) {
+    state.clock = {
+      ...state.clock,
+      ...saved.clock,
+      running: false,
+      timer: state.clock.timer,
+      lastTick: null
+    };
+  }
+}
+
+function saveAutosaveNow() {
+  if (!appReady) return;
+  try {
+    localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({
+      savedAt: new Date().toISOString(),
+      formValues: collectFormValues(),
+      state: serializableState()
+    }));
+  } catch {
+    // localStorage can be unavailable in private or locked-down browser modes.
+  }
+}
+
+function scheduleAutosave() {
+  if (!appReady) return;
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(saveAutosaveNow, 250);
+}
+
+function showAutosavePrompt() {
+  const panel = $("autosaveRestorePanel");
+  if (!panel) return;
+  let saved = null;
+  try {
+    saved = JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || "null");
+  } catch {
+    saved = null;
+  }
+  if (!saved) return;
+  const date = saved.savedAt ? new Date(saved.savedAt).toLocaleString() : "recently";
+  if ($("autosaveRestoreText")) $("autosaveRestoreText").textContent = `Restore the match autosaved at ${date}.`;
+  panel.hidden = false;
+}
+
+function restoreAutosave() {
+  let saved = null;
+  try {
+    saved = JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || "null");
+  } catch {
+    saved = null;
+  }
+  if (!saved) return;
+  runWithoutHistory(() => {
+    applyFormValues(saved.formValues);
+    applySerializableState(saved.state);
+    refreshAfterStateChange();
+  });
+  if ($("autosaveRestorePanel")) $("autosaveRestorePanel").hidden = true;
+  saveAutosaveNow();
+}
+
+function refreshAfterStateChange() {
+  renderTeamMeta("a");
+  renderTeamMeta("b");
+  renderTacSelect("A");
+  renderTacSelect("B");
+  updateTacHelp("a");
+  updateTacHelp("b");
+  renderAllDeployPlans();
+  syncEquipmentButtons("a");
+  syncEquipmentButtons("b");
+  syncInitiativeButton("a");
+  syncInitiativeButton("b");
+  syncLiveKillsToInputs();
+  updateOpSummaries();
+  recalculateAllPrimary();
+  updateKillOpScores();
+  syncTurningPointDisplay();
+  renderCpControls();
+  renderLiveQuickControls();
+  renderTpAccordion();
+  renderEndTpChecklist();
+  renderActivityLog();
+  renderOnlineRoom();
+  syncNames();
+  updateBattleLog();
+  updateResult();
+  paintClock();
+  setGameMode(state.gameMode || "live");
+}
+
 function enhanceScoreTableInputs() {
   document.querySelectorAll(".score-table [data-score]").forEach((input) => {
     if (input.closest(".score-stepper-cell")) return;
@@ -568,7 +825,8 @@ function renderTpAccordion() {
       block.append(
         heading,
         makeStepper("Crit", scoreInput(player, "crit", index), "compact-stepper"),
-        makeStepper("Tac", scoreInput(player, "tac", index), "compact-stepper")
+        makeStepper("Tac", scoreInput(player, "tac", index), "compact-stepper"),
+        makeLiveKillStepper(player, index)
       );
       body.append(block);
     });
@@ -720,6 +978,7 @@ function renderTacSelect(player) {
   const playerKey = player.toLowerCase();
   const team = selectedTeam(playerKey);
   const select = $(`tac${player}`);
+  const previousValue = select.value;
   const allowed = allowedTacOps(playerKey);
   const empty = option("", "Not selected");
   empty.className = "archetype-none";
@@ -732,7 +991,7 @@ function renderTacSelect(player) {
       return node;
     })
   );
-  select.value = "";
+  select.value = allowed.some((op) => op.name === previousValue) ? previousValue : "";
   updateTacSelectTone(playerKey);
   updateTacHelp(playerKey);
 }
@@ -773,6 +1032,9 @@ function updateCritHelp() {
 
 function updateScoreFromInput(input) {
   const [player, bucket, index] = input.dataset.score.split(".");
+  const oldValue = bucket === "crit" || bucket === "tac"
+    ? Number(state.scores[player][bucket][Number(index)] || 0)
+    : Number(state.scores[player][bucket] || 0);
   let value = Number(input.value || 0);
   if (bucket === "crit") {
     const scoreIndex = Number(index);
@@ -795,6 +1057,10 @@ function updateScoreFromInput(input) {
   } else {
     state.scores[player][bucket] = value;
   }
+  if (oldValue !== value) {
+    const label = bucket === "crit" || bucket === "tac" ? `TP${Number(index) + 1} ${bucket.toUpperCase()} VP` : `${bucket.toUpperCase()} VP`;
+    recordActivity(playerName(player), label, oldValue, value, () => setInputValue(input, oldValue));
+  }
   recalculatePrimary(player);
   updateOpSummaries();
   updateTotals();
@@ -811,6 +1077,7 @@ function updateTotals() {
   if ($("liveTotalA")) $("liveTotalA").textContent = `${totalA} VP`;
   if ($("liveTotalB")) $("liveTotalB").textContent = `${totalB} VP`;
   updateResult();
+  scheduleAutosave();
 }
 
 function updateResult() {
@@ -1121,6 +1388,100 @@ function updateLiveMode() {
     $(`liveCard${label}`).classList.toggle("active-clock-card", active);
     if ($(`liveStatus${label}`)) $(`liveStatus${label}`).textContent = active ? "Active turn" : "Waiting";
   });
+  renderLiveHud();
+}
+
+function currentInitiativePlayer() {
+  if (state.initiative.a) return "a";
+  if (state.initiative.b) return "b";
+  return "";
+}
+
+function primaryStatus(player) {
+  if (!state.primary[player].choice) return "Not selected";
+  if (!state.primary[player].revealed) return "Sealed";
+  return `${primaryLabel(state.primary[player].choice)} (${vpLabel(state.scores[player].primary)})`;
+}
+
+function renderHudPlayer(player) {
+  const card = $(`hudPlayer${playerLabel(player)}`);
+  if (!card) return;
+  const team = selectedTeam(player);
+  const initiative = currentInitiativePlayer() === player;
+  const crit = scoreTotal(player, "crit");
+  const tac = scoreTotal(player, "tac");
+  const kill = Number(state.scores[player].kill || 0);
+  card.classList.toggle("initiative-active", initiative);
+  card.replaceChildren();
+  const head = document.createElement("div");
+  head.className = "hud-player-head";
+  const title = document.createElement("div");
+  const name = document.createElement("h3");
+  name.textContent = playerName(player);
+  const teamNode = document.createElement("p");
+  teamNode.textContent = team?.name || "No Kill Team";
+  title.append(name, teamNode);
+  const total = document.createElement("output");
+  total.textContent = `${sumScore(player)} VP`;
+  head.append(title, total);
+  const stats = document.createElement("div");
+  stats.className = "hud-stat-grid";
+  [
+    ["CP", state.cp[player]],
+    ["CO", vpLabel(crit)],
+    ["TO", vpLabel(tac)],
+    ["KO", vpLabel(kill)],
+    ["Primary", primaryStatus(player)]
+  ].forEach(([label, value]) => {
+    const item = document.createElement("div");
+    item.className = "hud-stat";
+    const key = document.createElement("span");
+    key.textContent = label;
+    const data = document.createElement("strong");
+    data.textContent = String(value);
+    item.append(key, data);
+    stats.append(item);
+  });
+  card.append(head, stats);
+}
+
+function renderLiveHud() {
+  const tp = clampNumber(Number($("turningPoint")?.value || 1), 1, 4);
+  const initiative = currentInitiativePlayer();
+  if ($("hudTpLine")) $("hudTpLine").textContent = `TP${tp}`;
+  if ($("hudInitiative")) $("hudInitiative").textContent = initiative ? `Initiative: ${playerName(initiative)}` : "Initiative: Not selected";
+  renderHudPlayer("a");
+  renderHudPlayer("b");
+}
+
+function activeHudPlayer() {
+  return currentInitiativePlayer() || "a";
+}
+
+function handleHudAction(action) {
+  const player = activeHudPlayer();
+  const label = playerLabel(player);
+  const tp = clampNumber(Number($("turningPoint")?.value || 1), 1, 4);
+  const scoringIndex = Math.max(1, tp - 1);
+  if (action === "more") {
+    setGameMode("detail");
+    $("detailModePanel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  if (action === "cp") {
+    adjustInputValue($(`cp${label}`), 1);
+    return;
+  }
+  if (action === "kill") {
+    adjustLiveKills(player, tp - 1, 1);
+    return;
+  }
+  if (tp === 1 && (action === "crit" || action === "tac")) {
+    alert("Crit and Tac scoring starts from TP2.");
+    return;
+  }
+  if (action === "crit") adjustInputValue(scoreInput(player, "crit", scoringIndex), 1);
+  if (action === "tac") adjustInputValue(scoreInput(player, "tac", scoringIndex), 1);
 }
 
 function setGameMode(mode) {
@@ -1173,8 +1534,7 @@ function updateEndgameBattleReport() {
   }
   isRenderingEndgameBattleReport = true;
   try {
-    generateBattleReport();
-    target.replaceChildren(...Array.from($("battleReport").childNodes).map((node) => node.cloneNode(true)));
+    target.replaceChildren(...visualBattleReportBlocks());
   } finally {
     isRenderingEndgameBattleReport = false;
   }
@@ -1194,6 +1554,9 @@ function setPage(page) {
 
 function resetScores() {
   if (!confirm("Clear all scores, kills, and match notes?")) return;
+  const oldSummary = `${sumScore("a")} - ${sumScore("b")}`;
+  const previousSuppress = suppressHistory;
+  suppressHistory = true;
   document.querySelectorAll("[data-score]").forEach((input) => {
     input.value = 0;
     updateScoreFromInput(input);
@@ -1214,10 +1577,15 @@ function resetScores() {
   recalculateAllPrimary();
   syncStepperDisplays();
   renderLiveQuickControls();
+  suppressHistory = previousSuppress;
+  recordActivity("System", "Clear Scores", oldSummary, "0 - 0");
+  saveAutosaveNow();
 }
 
 function resetMatch() {
   if (!confirm("Reset the whole match and clear all current information? This cannot be undone.")) return;
+  const previousSuppress = suppressHistory;
+  suppressHistory = true;
 
   $("playerAName").value = "maru";
   $("playerBName").value = "milo";
@@ -1291,10 +1659,15 @@ function resetMatch() {
   paintClock();
   setGameMode("live");
   setPage("setup");
+  suppressHistory = previousSuppress;
+  localStorage.removeItem(AUTOSAVE_KEY);
+  recordActivity("System", "Reset Match", "Current match", "Default match");
+  saveAutosaveNow();
 }
 
 function syncPrimary(player) {
   const label = player.toUpperCase();
+  const oldChoice = state.primary[player].choice;
   state.primary[player].choice = $(`primary${label}`).value;
   updatePrimarySelectTone(player);
   if (state.primary[player].choice) {
@@ -1305,6 +1678,15 @@ function syncPrimary(player) {
   updateTp4PrimarySummary();
   renderGameTp1Controls();
   updateDeployReadinessSummary();
+  if (oldChoice !== state.primary[player].choice) {
+    recordActivity(playerName(player), "Primary choice", primaryLabel(oldChoice), primaryLabel(state.primary[player].choice), () => {
+      state.primary[player].choice = oldChoice;
+      $(`primary${label}`).value = oldChoice;
+      recalculatePrimary(player);
+      updateTotals();
+      renderGameTp1Controls();
+    });
+  }
 }
 
 function hidePrimary(player) {
@@ -1320,8 +1702,10 @@ function hidePrimary(player) {
   updateDeployReadinessSummary();
 }
 
-function revealPrimary(player) {
+function revealPrimary(player, skipConfirm = false) {
+  if (!skipConfirm && appReady && !suppressHistory && !confirm(`Reveal ${playerName(player)} Primary Op?`)) return;
   const label = player.toUpperCase();
+  const oldValue = state.primary[player].revealed ? "Revealed" : "Sealed";
   state.primary[player].revealed = true;
   updatePrimarySelectTone(player);
   $(`primaryBox${label}`).classList.remove("primary-hidden");
@@ -1331,19 +1715,30 @@ function revealPrimary(player) {
   updateTp4PrimarySummary();
   renderGameTp1Controls();
   updateDeployReadinessSummary();
+  recordActivity(playerName(player), "Reveal Primary", oldValue, "Revealed", () => {
+    state.primary[player].revealed = false;
+    updatePrimarySelectTone(player);
+    $(`primaryBox${label}`).classList.add("primary-hidden");
+    $(`primarySealed${label}`).hidden = false;
+    recalculatePrimary(player);
+    updateTotals();
+    updateTp4PrimarySummary();
+    renderGameTp1Controls();
+  });
 }
 
 function resetPrimary(player) {
   const label = player.toUpperCase();
   state.primary[player].choice = "";
   $(`primary${label}`).value = "";
-  revealPrimary(player);
+  revealPrimary(player, true);
   syncPrimary(player);
 }
 
 function endgameUnlockPrimary() {
-  revealPrimary("a");
-  revealPrimary("b");
+  if (appReady && !suppressHistory && !confirm("Reveal both players' Primary choices?")) return;
+  revealPrimary("a", true);
+  revealPrimary("b", true);
   updateTp4PrimarySummary();
 }
 
@@ -1357,12 +1752,21 @@ function sealTac(player) {
 }
 
 function revealTac(player) {
+  if (appReady && !suppressHistory && !confirm(`Reveal ${playerName(player)} Tac Op?`)) return;
   const label = player.toUpperCase();
+  const oldValue = state.tacOps[player].revealed ? "Revealed" : "Sealed";
   state.tacOps[player].revealed = true;
   $(`tac${label}`).classList.remove("tac-hidden");
   $(`tacSealed${label}`).hidden = true;
   updateTacHelp(player);
   updateBattleLog();
+  recordActivity(playerName(player), "Reveal Tac Op", oldValue, "Revealed", () => {
+    state.tacOps[player].revealed = false;
+    $(`tac${label}`).classList.add("tac-hidden");
+    $(`tac${label}Help`).textContent = "";
+    $(`tacSealed${label}`).hidden = false;
+    updateBattleLog();
+  });
 }
 
 function unlockTac(player) {
@@ -1379,8 +1783,10 @@ function resetTac(player) {
 }
 
 function syncTac(player) {
+  const oldLabel = visibleTacLabel(player);
   if (selectedTac(player)) {
     sealTac(player);
+    recordActivity(playerName(player), "Tac Op choice", oldLabel, selectedTac(player)?.name || "Not selected", () => resetTac(player));
     return;
   }
   revealTac(player);
@@ -1410,22 +1816,76 @@ function syncTurningPointDisplay() {
   if ($("liveTp4PrimaryPanel")) $("liveTp4PrimaryPanel").hidden = tp !== 4;
   updateTp4PrimarySummary();
   renderGameTp1Controls();
+  renderEndTpChecklist();
 }
 
 function adjustTurningPoint(delta) {
   const select = $("turningPoint");
+  const oldTp = Number(select.value || 1);
   const next = clampNumber(Number(select.value || 1) + delta, 1, 4);
+  if (oldTp === next) return;
   select.value = String(next);
+  recordActivity("Match", "Turning Point", `TP${oldTp}`, `TP${next}`, () => {
+    select.value = String(oldTp);
+    handleTurningPointChange();
+  });
   handleTurningPointChange();
 }
 
 function advanceBattleFlow() {
   const tp = clampNumber(Number($("turningPoint")?.value || 1), 1, 4);
   if (tp >= 4) {
+    if (!confirm("End the game and move to Endgame?")) return;
     setPage("endgame");
     return;
   }
+  if (!confirm(`End TP${tp} and go to TP${tp + 1}?`)) return;
   adjustTurningPoint(1);
+}
+
+function checklistLabels() {
+  return {
+    crit: "Crit VP entered",
+    tac: "Tac VP entered",
+    cp: "CP checked",
+    kills: "Enemy incapacitations recorded",
+    notes: "Notes/rulings added if needed"
+  };
+}
+
+function missingEndTpChecklistItems(tp) {
+  const checks = state.endTpChecks[tp] || {};
+  return Object.entries(checklistLabels())
+    .filter(([key]) => !checks[key])
+    .map(([, label]) => label);
+}
+
+function renderEndTpChecklist() {
+  const tp = clampNumber(Number($("turningPoint")?.value || 1), 1, 4);
+  if ($("endTpChecklistTitle")) $("endTpChecklistTitle").textContent = tp >= 4 ? "Before ending the game" : `Before ending TP${tp}`;
+  document.querySelectorAll("[data-end-tp-check]").forEach((input) => {
+    const key = input.dataset.endTpCheck;
+    input.checked = Boolean(state.endTpChecks[tp]?.[key]);
+  });
+  const missing = missingEndTpChecklistItems(tp);
+  if ($("endTpWarning")) {
+    $("endTpWarning").textContent = missing.length
+      ? `Unchecked: ${missing.join(", ")}. You can still continue after confirmation.`
+      : "Checklist complete for this TP.";
+  }
+}
+
+function updateEndTpCheck(input) {
+  const tp = clampNumber(Number($("turningPoint")?.value || 1), 1, 4);
+  const key = input.dataset.endTpCheck;
+  if (!state.endTpChecks[tp]) state.endTpChecks[tp] = {};
+  const oldValue = Boolean(state.endTpChecks[tp][key]);
+  state.endTpChecks[tp][key] = input.checked;
+  recordActivity("Match", `TP${tp} checklist ${checklistLabels()[key]}`, oldValue ? "Checked" : "Open", input.checked ? "Checked" : "Open", () => {
+    state.endTpChecks[tp][key] = oldValue;
+    renderEndTpChecklist();
+  });
+  renderEndTpChecklist();
 }
 
 function toggleEquipmentReady(player) {
@@ -1453,12 +1913,22 @@ function syncEquipmentButtons(player) {
   updateDeployReadinessSummary();
 }
 function toggleInitiative(player) {
+  const oldPlayer = state.initiative.a ? "a" : state.initiative.b ? "b" : "";
   state.initiative.a = player === "a";
   state.initiative.b = player === "b";
   syncInitiativeButton("a");
   syncInitiativeButton("b");
   renderGameTp1Controls();
   updateDeployReadinessSummary();
+  if (oldPlayer !== player) {
+    recordActivity("Match", "Initiative", oldPlayer ? playerName(oldPlayer) : "Not selected", playerName(player), () => {
+      state.initiative.a = oldPlayer === "a";
+      state.initiative.b = oldPlayer === "b";
+      syncInitiativeButton("a");
+      syncInitiativeButton("b");
+      renderGameTp1Controls();
+    });
+  }
 }
 
 function syncInitiativeButton(player) {
@@ -2028,6 +2498,94 @@ function reportTextBlock() {
   return block;
 }
 
+function visualBattleReportBlocks() {
+  const crit = selectedCrit();
+  const notes = $("matchNotes").value.trim();
+  const totalA = sumScore("a");
+  const totalB = sumScore("b");
+
+  const summaryCard = document.createElement("section");
+  summaryCard.className = `report-summary-card ${totalA > totalB ? "winner-a" : totalB > totalA ? "winner-b" : "winner-draw"}`;
+  const score = document.createElement("h2");
+  score.className = "report-final-score";
+  score.innerHTML = `<span class="score-a">${playerName("a")} ${totalA}</span><span>-</span><span class="score-b">${playerName("b")} ${totalB}</span>`;
+  const teamLine = document.createElement("p");
+  teamLine.className = "report-team-line";
+  teamLine.textContent = `${reportTeamName("a")} - ${reportTeamName("b")}`;
+  const winner = document.createElement("p");
+  winner.className = "report-winner";
+  winner.textContent = reportWinnerText();
+  const facts = document.createElement("div");
+  facts.className = "report-summary-facts";
+  facts.append(
+    reportDetail("Mission", crit?.name || "Not selected"),
+    reportDetail("Killzone", $("killzone").value),
+    reportDetail("Map", $("mapNumber").value),
+    reportDetail("Generated", new Date().toLocaleString())
+  );
+  summaryCard.append(score, teamLine, winner, facts);
+
+  const playerGrid = document.createElement("div");
+  playerGrid.className = "report-player-grid";
+  playerGrid.append(reportPlayerCard("a"), reportPlayerCard("b"));
+
+  const tpTable = makeReportTable(
+    ["TP", `${playerName("a")} CO`, `${playerName("a")} TO`, `${playerName("a")} KO`, `${playerName("a")} VP`, `${playerName("b")} CO`, `${playerName("b")} TO`, `${playerName("b")} KO`, `${playerName("b")} VP`],
+    formattedTpReportRows(),
+    "tp-report-table"
+  );
+  const tpSection = document.createElement("section");
+  tpSection.className = "report-section report-tp-section";
+  const tpTitle = document.createElement("h3");
+  tpTitle.textContent = "VP Break Down Table";
+  const tpCards = document.createElement("div");
+  tpCards.className = "report-tp-accordion";
+  tpReportRows().forEach((row) => {
+    const [tp, aCrit, aTac, aKill, bCrit, bTac, bKill] = row;
+    const details = document.createElement("details");
+    details.className = "report-tp-card";
+    details.open = true;
+    const summary = document.createElement("summary");
+    summary.textContent = tp;
+    const body = document.createElement("div");
+    body.className = "report-tp-card-body";
+    body.append(
+      reportDetail(playerName("a"), `CO ${aCrit} / TO ${aTac} / KO ${aKill} / VP ${scoreNumber(aCrit) + scoreNumber(aTac) + scoreNumber(aKill)}`, "player-a-text"),
+      reportDetail(playerName("b"), `CO ${bCrit} / TO ${bTac} / KO ${bKill} / VP ${scoreNumber(bCrit) + scoreNumber(bTac) + scoreNumber(bKill)}`, "player-b-text")
+    );
+    details.append(summary, body);
+    tpCards.append(details);
+  });
+  const formattedRows = formattedTpReportRows();
+  const totalRow = formattedRows[formattedRows.length - 1];
+  if (totalRow) {
+    const details = document.createElement("details");
+    details.className = "report-tp-card report-tp-total-card";
+    details.open = true;
+    const summary = document.createElement("summary");
+    summary.textContent = "Total";
+    const body = document.createElement("div");
+    body.className = "report-tp-card-body";
+    body.append(
+      reportDetail(playerName("a"), `CO ${totalRow[1]} / TO ${totalRow[2]} / KO ${totalRow[3]} / VP ${totalRow[4]}`, "player-a-text"),
+      reportDetail(playerName("b"), `CO ${totalRow[5]} / TO ${totalRow[6]} / KO ${totalRow[7]} / VP ${totalRow[8]}`, "player-b-text")
+    );
+    details.append(summary, body);
+    tpCards.append(details);
+  }
+  tpSection.append(tpTitle, tpTable, tpCards);
+
+  const notesBlock = document.createElement("section");
+  notesBlock.className = "report-notes";
+  const notesTitle = document.createElement("h3");
+  notesTitle.textContent = "Notes / Rulings";
+  const notesText = document.createElement("p");
+  notesText.textContent = notes || "No notes recorded.";
+  notesBlock.append(notesTitle, notesText);
+
+  return [summaryCard, playerGrid, tpSection, notesBlock];
+}
+
 function generateBattleReport() {
   tickClock();
   const report = $("battleReport");
@@ -2040,8 +2598,33 @@ function battleReportPlainText() {
   return battleReportWhatsappText();
 }
 
-async function copyBattleReport() {
-  const text = battleReportPlainText();
+function battleReportMarkdownText() {
+  return [
+    `# ${playerName("a")} ${sumScore("a")} - ${playerName("b")} ${sumScore("b")}`,
+    `**${reportTeamName("a")} - ${reportTeamName("b")}**`,
+    `**${reportWinnerText()}**`,
+    "",
+    `**Mission:** ${selectedCrit()?.name || "Not selected"} / ${$("killzone").value} / ${$("mapNumber").value}`,
+    `**TP:** ${$("turningPoint").value}`,
+    "",
+    "## Players",
+    battleReportWhatsappText()
+      .split("\n")
+      .slice(7)
+      .join("\n")
+  ].join("\n");
+}
+
+function battleReportDiscordText() {
+  return [
+    "**Kill Team Battle Report**",
+    "```",
+    battleReportWhatsappText(),
+    "```"
+  ].join("\n");
+}
+
+async function copyText(text, buttons, doneLabel = "Copied") {
   try {
     await navigator.clipboard.writeText(text);
   } catch {
@@ -2055,15 +2638,116 @@ async function copyBattleReport() {
     document.execCommand("copy");
     box.remove();
   }
-  const button = $("copyBattleReportButton");
-  [button, $("stickyCopyBattleReport")].filter(Boolean).forEach((copyButton) => {
-    copyButton.textContent = "Copied";
+  buttons.filter(Boolean).forEach((copyButton) => {
+    copyButton.dataset.originalText = copyButton.dataset.originalText || copyButton.textContent;
+    copyButton.textContent = doneLabel;
   });
   setTimeout(() => {
-    [button, $("stickyCopyBattleReport")].filter(Boolean).forEach((copyButton) => {
-      copyButton.textContent = "Copy Summary";
+    buttons.filter(Boolean).forEach((copyButton) => {
+      copyButton.textContent = copyButton.dataset.originalText || "Copy Summary";
     });
   }, 1400);
+}
+
+async function copyBattleReport() {
+  await copyText(battleReportPlainText(), [$("copyBattleReportButton"), $("stickyCopyBattleReport")]);
+}
+
+async function copyMarkdownReport() {
+  await copyText(battleReportMarkdownText(), [$("copyMarkdownReport")]);
+}
+
+async function copyDiscordReport() {
+  await copyText(battleReportDiscordText(), [$("copyDiscordReport")]);
+}
+
+function exportReportImage() {
+  const text = battleReportWhatsappText();
+  const lines = text.split("\n");
+  const width = 1080;
+  const lineHeight = 30;
+  const padding = 42;
+  const height = Math.max(520, padding * 2 + lines.length * lineHeight);
+  const escaped = lines.map((line, index) => {
+    const safe = line
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;");
+    return `<text x="${padding}" y="${padding + index * lineHeight}" fill="#f4f0e8" font-size="${index < 3 ? 30 : 22}" font-weight="${index < 3 ? 800 : 500}">${safe}</text>`;
+  }).join("");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#101513"/><rect x="18" y="18" width="${width - 36}" height="${height - 36}" rx="14" fill="#171d1a" stroke="#d7b46a" stroke-opacity="0.55"/>${escaped}</svg>`;
+  const image = new Image();
+  const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  image.onload = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(image, 0, 0);
+    URL.revokeObjectURL(url);
+    canvas.toBlob((pngBlob) => {
+      if (!pngBlob) return;
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(pngBlob);
+      link.download = `kill-team-battle-report-${new Date().toISOString().slice(0, 10)}.png`;
+      document.body.append(link);
+      link.click();
+      URL.revokeObjectURL(link.href);
+      link.remove();
+    });
+  };
+  image.src = url;
+}
+
+function createOnlineGameRoom() {
+  const id = `KT-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+  const base = `${location.href.split("#")[0]}#room=${encodeURIComponent(id)}`;
+  state.online = {
+    gameId: id,
+    enabled: false,
+    links: {
+      a: `${base}&role=player-a`,
+      b: `${base}&role=player-b`,
+      spectator: `${base}&role=spectator`
+    }
+  };
+  renderOnlineRoom();
+  recordActivity("Online Room", "Create Game ID", "None", id);
+}
+
+function renderOnlineRoom() {
+  if (!$("onlineGameStatus")) return;
+  const links = state.online.links;
+  $("onlineGameStatus").textContent = state.online.gameId
+    ? `Game ID: ${state.online.gameId} - Firebase sync not configured`
+    : "Local offline match";
+  const target = $("onlineJoinLinks");
+  if (!target) return;
+  target.hidden = !links;
+  if (!links) {
+    target.replaceChildren();
+    return;
+  }
+  target.replaceChildren(...[
+    ["Player A", links.a],
+    ["Player B", links.b],
+    ["Spectator", links.spectator]
+  ].map(([label, link]) => {
+    const row = document.createElement("label");
+    row.className = "online-link-row";
+    const span = document.createElement("span");
+    span.textContent = label;
+    const input = document.createElement("input");
+    input.value = link;
+    input.readOnly = true;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "Copy";
+    button.addEventListener("click", () => copyText(link, [button]));
+    row.append(span, input, button);
+    return row;
+  }));
 }
 
 async function loadRules() {
@@ -2104,7 +2788,13 @@ function wireEvents() {
   ["killzone", "mapNumber"].forEach((id) => $(id).addEventListener("change", updateBattleLog));
   $("turningPoint").addEventListener("change", handleTurningPointChange);
   $("tpMinus").addEventListener("click", () => adjustTurningPoint(-1));
-  $("tpPlus").addEventListener("click", () => adjustTurningPoint(1));
+  $("tpPlus").addEventListener("click", advanceBattleFlow);
+  document.querySelectorAll("[data-hud-action]").forEach((button) => {
+    button.addEventListener("click", () => handleHudAction(button.dataset.hudAction));
+  });
+  document.querySelectorAll("[data-end-tp-check]").forEach((input) => {
+    input.addEventListener("change", () => updateEndTpCheck(input));
+  });
   [
     ["equipmentReadyA", "a"],
     ["equipmentReadyB", "b"]
@@ -2151,7 +2841,15 @@ function wireEvents() {
   ["A", "B"].forEach((player) => {
     const playerKey = player.toLowerCase();
     $(`cp${player}`).addEventListener("input", () => {
+      const oldValue = Number(state.cp[playerKey] || 0);
       state.cp[playerKey] = Number($(`cp${player}`).value || 0);
+      if (oldValue !== state.cp[playerKey]) {
+        recordActivity(playerName(playerKey), "CP", oldValue, state.cp[playerKey], () => {
+          state.cp[playerKey] = oldValue;
+          $(`cp${player}`).value = oldValue;
+          syncStepperDisplays();
+        });
+      }
       syncStepperDisplays();
     });
   });
@@ -2173,8 +2871,19 @@ function wireEvents() {
   $("reportExportCsv").addEventListener("click", exportCsv);
   $("battleReportButton").addEventListener("click", generateBattleReport);
   $("copyBattleReportButton").addEventListener("click", copyBattleReport);
+  $("copyMarkdownReport").addEventListener("click", copyMarkdownReport);
+  $("copyDiscordReport").addEventListener("click", copyDiscordReport);
+  $("exportReportImage").addEventListener("click", exportReportImage);
   $("stickyCopyBattleReport").addEventListener("click", copyBattleReport);
   $("stickyExportCsv").addEventListener("click", exportCsv);
+  $("createOnlineGame").addEventListener("click", createOnlineGameRoom);
+  $("restoreAutosaveButton").addEventListener("click", restoreAutosave);
+  $("dismissAutosaveButton").addEventListener("click", () => {
+    $("autosaveRestorePanel").hidden = true;
+  });
+  document.addEventListener("input", scheduleAutosave);
+  document.addEventListener("change", scheduleAutosave);
+  window.addEventListener("beforeunload", saveAutosaveNow);
   state.clock.timer = setInterval(tickClock, 250);
 }
 
@@ -2207,6 +2916,13 @@ async function init() {
   syncTurningPointDisplay();
   setGameMode("live");
   setPage("setup");
+  renderEndTpChecklist();
+  renderActivityLog();
+  renderOnlineRoom();
+  showAutosavePrompt();
+  const waitingForRestore = $("autosaveRestorePanel") && !$("autosaveRestorePanel").hidden;
+  appReady = true;
+  if (!waitingForRestore) saveAutosaveNow();
 }
 
 init();
