@@ -233,6 +233,8 @@ const AUTOSAVE_KEY = "killTeamScoreTool.autosave.v1";
 let appReady = false;
 let suppressHistory = false;
 let autosaveTimer = null;
+let onlineSyncTimer = null;
+let applyingOnlineUpdate = false;
 
 function runWithoutHistory(callback) {
   const previous = suppressHistory;
@@ -691,12 +693,60 @@ function saveAutosaveNow() {
   } catch {
     // localStorage can be unavailable in private or locked-down browser modes.
   }
+  scheduleOnlinePush();
 }
 
 function scheduleAutosave() {
   if (!appReady) return;
   clearTimeout(autosaveTimer);
   autosaveTimer = setTimeout(saveAutosaveNow, 250);
+}
+
+function currentMatchPayload() {
+  return {
+    savedAt: new Date().toISOString(),
+    formValues: collectFormValues(),
+    state: serializableState()
+  };
+}
+
+function applyRemoteMatchPayload(payload = {}) {
+  if (!payload.formValues && !payload.state) return;
+  const previousOnline = { ...state.online };
+  applyingOnlineUpdate = true;
+  runWithoutHistory(() => {
+    applyFormValues(payload.formValues || {});
+    applySerializableState(payload.state || {});
+    state.online = {
+      ...state.online,
+      ...previousOnline,
+      enabled: previousOnline.enabled,
+      gameId: previousOnline.gameId,
+      links: previousOnline.links,
+      role: previousOnline.role,
+      status: previousOnline.status
+    };
+    refreshAfterStateChange();
+  });
+  saveAutosaveNow();
+  applyingOnlineUpdate = false;
+}
+
+function scheduleOnlinePush() {
+  if (!appReady || applyingOnlineUpdate) return;
+  if (!state.online.enabled || !state.online.gameId || !window.KTFirebaseSync) return;
+  clearTimeout(onlineSyncTimer);
+  onlineSyncTimer = setTimeout(async () => {
+    const result = await window.KTFirebaseSync.push(state.online.gameId, currentMatchPayload());
+    if (!result.ok) {
+      state.online.enabled = false;
+      state.online.status = result.reason || "Firebase sync stopped; offline mode active";
+    } else {
+      state.online.lastSyncAt = new Date().toISOString();
+      state.online.status = "Live sync active";
+    }
+    renderOnlineRoom();
+  }, 800);
 }
 
 function showAutosavePrompt() {
@@ -2700,27 +2750,43 @@ function exportReportImage() {
   image.src = url;
 }
 
-function createOnlineGameRoom() {
+async function createOnlineGameRoom() {
   const id = `KT-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
   const base = `${location.href.split("#")[0]}#room=${encodeURIComponent(id)}`;
   state.online = {
     gameId: id,
     enabled: false,
+    role: "host",
+    status: "Preparing online room",
     links: {
       a: `${base}&role=player-a`,
       b: `${base}&role=player-b`,
       spectator: `${base}&role=spectator`
     }
   };
+  if (window.KTFirebaseSync) {
+    const result = await window.KTFirebaseSync.createRoom(id, currentMatchPayload(), "host");
+    if (result.ok) {
+      state.online.enabled = true;
+      state.online.uid = result.uid;
+      state.online.status = "Live sync active";
+      await window.KTFirebaseSync.subscribe(id, (data) => applyRemoteMatchPayload(data.payload));
+    } else {
+      state.online.status = result.reason || "Firebase unavailable; offline links only";
+    }
+  } else {
+    state.online.status = "Firebase module unavailable; offline links only";
+  }
   renderOnlineRoom();
   recordActivity("Online Room", "Create Game ID", "None", id);
+  saveAutosaveNow();
 }
 
 function renderOnlineRoom() {
   if (!$("onlineGameStatus")) return;
   const links = state.online.links;
   $("onlineGameStatus").textContent = state.online.gameId
-    ? `Game ID: ${state.online.gameId} - Firebase sync not configured`
+    ? `Game ID: ${state.online.gameId} - ${state.online.status || "Offline links only"}`
     : "Local offline match";
   const target = $("onlineJoinLinks");
   if (!target) return;
@@ -2748,6 +2814,40 @@ function renderOnlineRoom() {
     row.append(span, input, button);
     return row;
   }));
+}
+
+async function joinOnlineGameFromUrl() {
+  const params = new URLSearchParams(location.hash.replace(/^#/, ""));
+  const roomId = params.get("room");
+  if (!roomId) return;
+  const role = params.get("role") || "spectator";
+  const base = `${location.href.split("#")[0]}#room=${encodeURIComponent(roomId)}`;
+  state.online = {
+    gameId: roomId,
+    enabled: false,
+    role,
+    status: "Joining online room",
+    links: {
+      a: `${base}&role=player-a`,
+      b: `${base}&role=player-b`,
+      spectator: `${base}&role=spectator`
+    }
+  };
+  renderOnlineRoom();
+  if (!window.KTFirebaseSync) {
+    state.online.status = "Firebase module unavailable; offline mode active";
+    renderOnlineRoom();
+    return;
+  }
+  const result = await window.KTFirebaseSync.joinRoom(roomId, role, (data) => applyRemoteMatchPayload(data.payload));
+  if (result.ok) {
+    state.online.enabled = true;
+    state.online.uid = result.uid;
+    state.online.status = `Live sync active as ${role}`;
+  } else {
+    state.online.status = result.reason || "Firebase unavailable; offline mode active";
+  }
+  renderOnlineRoom();
 }
 
 async function loadRules() {
@@ -2923,6 +3023,7 @@ async function init() {
   const waitingForRestore = $("autosaveRestorePanel") && !$("autosaveRestorePanel").hidden;
   appReady = true;
   if (!waitingForRestore) saveAutosaveNow();
+  await joinOnlineGameFromUrl();
 }
 
 init();
