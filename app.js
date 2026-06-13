@@ -3173,23 +3173,39 @@ function exportReportImage() {
   image.src = url;
 }
 
+function createAccessToken() {
+  const webCrypto = globalThis.crypto;
+  if (webCrypto?.randomUUID) return webCrypto.randomUUID();
+  if (!webCrypto?.getRandomValues) return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  const bytes = new Uint8Array(16);
+  webCrypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 async function createOnlineGameRoom() {
   const id = `KT-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
   const base = `${location.href.split("#")[0]}#room=${encodeURIComponent(id)}`;
+  const tokens = {
+    host: createAccessToken(),
+    "player-a": createAccessToken(),
+    "player-b": createAccessToken(),
+    spectator: createAccessToken()
+  };
   state.online = {
     gameId: id,
     enabled: false,
     mode: "online",
     role: "host",
     status: "Preparing online room",
+    tokens,
     links: {
-      a: `${base}&role=player-a`,
-      b: `${base}&role=player-b`,
-      spectator: `${base}&role=spectator`
+      a: `${base}&role=player-a&token=${encodeURIComponent(tokens["player-a"])}`,
+      b: `${base}&role=player-b&token=${encodeURIComponent(tokens["player-b"])}`,
+      spectator: `${base}&role=spectator&token=${encodeURIComponent(tokens.spectator)}`
     }
   };
   if (window.KTFirebaseSync) {
-    const result = await window.KTFirebaseSync.createRoom(id, currentMatchPayload(), "host");
+    const result = await window.KTFirebaseSync.createRoom(id, currentMatchPayload(), "host", tokens);
     if (result.ok) {
       state.online.enabled = true;
       state.online.uid = result.uid;
@@ -3294,6 +3310,7 @@ async function joinOnlineGameFromUrl() {
   const roomId = params.get("room");
   if (!roomId) return;
   const role = params.get("role") || "spectator";
+  const token = params.get("token") || "";
   const base = `${location.href.split("#")[0]}#room=${encodeURIComponent(roomId)}`;
   state.online = {
     gameId: roomId,
@@ -3302,9 +3319,9 @@ async function joinOnlineGameFromUrl() {
     role,
     status: "Joining online room",
     links: {
-      a: `${base}&role=player-a`,
-      b: `${base}&role=player-b`,
-      spectator: `${base}&role=spectator`
+      a: `${base}&role=player-a${token ? `&token=${encodeURIComponent(token)}` : ""}`,
+      b: `${base}&role=player-b${token ? `&token=${encodeURIComponent(token)}` : ""}`,
+      spectator: `${base}&role=spectator${token ? `&token=${encodeURIComponent(token)}` : ""}`
     }
   };
   renderOnlineRoom();
@@ -3314,7 +3331,7 @@ async function joinOnlineGameFromUrl() {
     renderOnlineRoom();
     return;
   }
-  const result = await window.KTFirebaseSync.joinRoom(roomId, role, (data) => applyRemoteMatchPayload(data.payload));
+  const result = await window.KTFirebaseSync.joinRoom(roomId, role, (data) => applyRemoteMatchPayload(data.payload), token);
   if (result.ok) {
     state.online.enabled = true;
     state.online.uid = result.uid;

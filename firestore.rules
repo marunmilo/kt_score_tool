@@ -6,17 +6,53 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function validRole(role) {
+      return role in ["host", "player-a", "player-b", "spectator"];
+    }
+
+    function isMember() {
+      return signedIn()
+        && resource.data.members.keys().hasAny([request.auth.uid]);
+    }
+
+    function isHost() {
+      return signedIn()
+        && resource.data.hostUid == request.auth.uid;
+    }
+
+    function joinRole() {
+      return request.resource.data.members[request.auth.uid].role;
+    }
+
+    function canJoinWithToken() {
+      return signedIn()
+        && !isMember()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["updatedAt", "members"])
+        && validRole(joinRole())
+        && joinRole() != "host"
+        && request.resource.data.members[request.auth.uid].token == resource.data.accessTokens[joinRole()];
+    }
+
+    function canMemberSync() {
+      return isMember()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["updatedAt", "lastWriterUid", "payload"])
+        && request.resource.data.lastWriterUid == request.auth.uid;
+    }
+
     match /killTeamRooms/{roomId} {
       // Personal/trusted game-room rules.
       // Anonymous Auth must be enabled in Firebase Console.
       allow create: if signedIn()
         && request.resource.data.hostUid == request.auth.uid
-        && request.resource.data.schemaVersion == 1;
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.members[request.auth.uid].role == "host"
+        && request.resource.data.members[request.auth.uid].token == request.resource.data.accessTokens.host;
 
-      allow read, update: if signedIn();
+      allow get: if isHost() || isMember();
+      allow list: if false;
+      allow update: if isHost() || canJoinWithToken() || canMemberSync();
 
-      allow delete: if signedIn()
-        && resource.data.hostUid == request.auth.uid;
+      allow delete: if isHost();
     }
   }
 }

@@ -44,20 +44,28 @@ export async function init() {
   return { ok: true, uid: syncState.uid };
 }
 
-export async function createRoom(roomId, payload, role = "host") {
+export async function createRoom(roomId, payload, role = "host", accessTokens = {}) {
   const ready = await readyFirestore();
   if (!ready.ok) return ready;
   const { setDoc, serverTimestamp } = ready.tools;
   syncState.roomId = roomId;
   syncState.role = normalizeRole(role);
+  const tokens = {
+    host: accessTokens.host || crypto.randomUUID(),
+    "player-a": accessTokens["player-a"] || crypto.randomUUID(),
+    "player-b": accessTokens["player-b"] || crypto.randomUUID(),
+    spectator: accessTokens.spectator || crypto.randomUUID()
+  };
   await setDoc(roomRef(ready, roomId), {
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     hostUid: syncState.uid,
     lastWriterUid: syncState.uid,
+    accessTokens: tokens,
     members: {
       [syncState.uid]: {
         role: syncState.role,
+        token: tokens.host,
         joinedAt: serverTimestamp()
       }
     },
@@ -116,21 +124,18 @@ export async function subscribe(roomId, callback) {
   return { ok: true, uid: syncState.uid };
 }
 
-export async function joinRoom(roomId, role, callback) {
+export async function joinRoom(roomId, role, callback, token = "") {
   syncState.role = normalizeRole(role);
   const ready = await readyFirestore();
   if (!ready.ok) return ready;
-  const { getDoc, setDoc, serverTimestamp } = ready.tools;
+  const { setDoc, serverTimestamp } = ready.tools;
   const ref = roomRef(ready, roomId);
-  const snapshot = await getDoc(ref);
-  if (!snapshot.exists()) {
-    return { ok: false, reason: `Room ${roomId} was not found` };
-  }
   await setDoc(ref, {
     updatedAt: serverTimestamp(),
     members: {
       [syncState.uid]: {
         role: syncState.role,
+        token,
         joinedAt: serverTimestamp()
       }
     }
