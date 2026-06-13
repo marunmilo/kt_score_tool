@@ -32,6 +32,7 @@
     createRoom: (...args) => withSync("createRoom", args),
     joinRoom: (...args) => withSync("joinRoom", args),
     push: (...args) => withSync("push", args),
+    pushPatch: (...args) => withSync("pushPatch", args),
     subscribe: (...args) => withSync("subscribe", args),
     status: () => {
       if (syncModule && typeof syncModule.status === "function") return syncModule.status();
@@ -45,4 +46,3 @@
     }
   };
 })();
-

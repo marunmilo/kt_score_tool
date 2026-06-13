@@ -192,7 +192,9 @@ const state = {
   },
   initiative: {
     a: false,
-    b: false
+    b: false,
+    deploy: "",
+    previous: ""
   },
   liveKillsByTp: {
     a: [0, 0, 0, 0],
@@ -222,10 +224,11 @@ const state = {
   online: {
     gameId: "",
     links: null,
-    enabled: false
+    enabled: false,
+    mode: "local"
   },
   gameMode: "live",
-  page: "setup"
+  page: "start"
 };
 
 const $ = (id) => document.getElementById(id);
@@ -235,6 +238,7 @@ let suppressHistory = false;
 let autosaveTimer = null;
 let onlineSyncTimer = null;
 let applyingOnlineUpdate = false;
+let lastRemotePayload = null;
 
 function runWithoutHistory(callback) {
   const previous = suppressHistory;
@@ -470,6 +474,7 @@ function adjustLiveKills(player, tpIndex, delta) {
 function makeLiveKillStepper(player, tpIndex) {
   const wrapper = document.createElement("div");
   wrapper.className = "stepper-row compact-stepper live-kill-stepper";
+  wrapper.dataset.rolePlayer = player;
   const title = document.createElement("span");
   title.className = "stepper-label";
   title.textContent = `TP${tpIndex + 1} enemy operatives incapacitated`;
@@ -564,6 +569,8 @@ function scoreInput(player, bucket, index = "") {
 function makeStepper(label, input, className = "") {
   const wrapper = document.createElement("div");
   wrapper.className = `stepper-row ${className}`.trim();
+  const scorePlayer = input.dataset.score ? input.dataset.score.split(".")[0] : "";
+  if (scorePlayer) wrapper.dataset.rolePlayer = scorePlayer;
   const title = document.createElement("span");
   title.className = "stepper-label";
   title.textContent = label;
@@ -602,6 +609,7 @@ function syncStepperDisplays() {
     if (input) display.textContent = input.value || "0";
   });
   updateLiveMode();
+  applyRolePermissions();
 }
 
 function collectFormValues() {
@@ -671,6 +679,13 @@ function applySerializableState(saved = {}) {
   ].forEach((key) => {
     if (saved[key] !== undefined) state[key] = saved[key];
   });
+  state.initiative = {
+    a: false,
+    b: false,
+    deploy: "",
+    previous: "",
+    ...state.initiative
+  };
   if (saved.clock) {
     state.clock = {
       ...state.clock,
@@ -710,8 +725,129 @@ function currentMatchPayload() {
   };
 }
 
+function cloneMatchPayload(payload) {
+  if (!payload) return null;
+  return JSON.parse(JSON.stringify(payload));
+}
+
+function onlineRole() {
+  return state.online?.role || "host";
+}
+
+function onlineRolePlayer() {
+  if (onlineRole() === "player-a") return "a";
+  if (onlineRole() === "player-b") return "b";
+  return "";
+}
+
+function isOnlineRestrictedRole() {
+  return Boolean(state.online?.gameId) && onlineRole() !== "host";
+}
+
+function canEditPlayer(player) {
+  if (!isOnlineRestrictedRole()) return true;
+  if (onlineRole() === "player-a") return player === "a";
+  if (onlineRole() === "player-b") return player === "b";
+  return false;
+}
+
+function canEditSharedOnlineFields() {
+  return !isOnlineRestrictedRole();
+}
+
+function mergePlayerScopedPayload(basePayload, localPayload, player) {
+  if (!basePayload || !localPayload || !player) return localPayload;
+  const label = playerLabel(player);
+  const formIds = [
+    `player${label}Name`,
+    `communityTeam${label}`,
+    `team${label}`,
+    `tac${label}`,
+    `primary${label}`,
+    `deployOps${label}`,
+    `cp${label}`,
+    `killVp${label}`,
+    `startEnemies${label}`,
+    `kills${label}`
+  ];
+  if (!basePayload.formValues) basePayload.formValues = {};
+  formIds.forEach((id) => {
+    if (localPayload.formValues && Object.prototype.hasOwnProperty.call(localPayload.formValues, id)) {
+      basePayload.formValues[id] = localPayload.formValues[id];
+    }
+  });
+
+  if (!basePayload.state) basePayload.state = {};
+  [
+    "scores",
+    "primary",
+    "tacOps",
+    "equipment",
+    "equipmentSetup",
+    "deployDone",
+    "liveKillsByTp",
+    "cp"
+  ].forEach((key) => {
+    if (!localPayload.state?.[key]) return;
+    if (!basePayload.state[key]) basePayload.state[key] = {};
+    basePayload.state[key][player] = cloneMatchPayload(localPayload.state[key][player]);
+  });
+  basePayload.savedAt = localPayload.savedAt;
+  basePayload.state.activity = localPayload.state?.activity || basePayload.state.activity;
+  basePayload.state.undoStack = [];
+  return basePayload;
+}
+
+function playerScopedPatch(localPayload, player) {
+  if (!localPayload || !player) return null;
+  const patch = {
+    "payload.savedAt": localPayload.savedAt
+  };
+  const label = playerLabel(player);
+  [
+    `player${label}Name`,
+    `communityTeam${label}`,
+    `team${label}`,
+    `tac${label}`,
+    `primary${label}`,
+    `deployOps${label}`,
+    `cp${label}`,
+    `killVp${label}`,
+    `startEnemies${label}`,
+    `kills${label}`
+  ].forEach((id) => {
+    if (localPayload.formValues && Object.prototype.hasOwnProperty.call(localPayload.formValues, id)) {
+      patch[`payload.formValues.${id}`] = localPayload.formValues[id];
+    }
+  });
+  [
+    "scores",
+    "primary",
+    "tacOps",
+    "equipment",
+    "equipmentSetup",
+    "deployDone",
+    "liveKillsByTp",
+    "cp"
+  ].forEach((key) => {
+    if (!localPayload.state?.[key]) return;
+    patch[`payload.state.${key}.${player}`] = cloneMatchPayload(localPayload.state[key][player]);
+  });
+  return patch;
+}
+
+function scopedOnlinePayload() {
+  const localPayload = currentMatchPayload();
+  const player = onlineRolePlayer();
+  if (!isOnlineRestrictedRole()) return localPayload;
+  if (!player) return null;
+  const basePayload = cloneMatchPayload(lastRemotePayload) || cloneMatchPayload(localPayload);
+  return mergePlayerScopedPayload(basePayload, localPayload, player);
+}
+
 function applyRemoteMatchPayload(payload = {}) {
   if (!payload.formValues && !payload.state) return;
+  lastRemotePayload = cloneMatchPayload(payload);
   const previousOnline = { ...state.online };
   applyingOnlineUpdate = true;
   runWithoutHistory(() => {
@@ -737,48 +873,237 @@ function scheduleOnlinePush() {
   if (!state.online.enabled || !state.online.gameId || !window.KTFirebaseSync) return;
   clearTimeout(onlineSyncTimer);
   onlineSyncTimer = setTimeout(async () => {
-    const result = await window.KTFirebaseSync.push(state.online.gameId, currentMatchPayload());
+    const player = onlineRolePlayer();
+    const localPayload = currentMatchPayload();
+    const patch = isOnlineRestrictedRole() && player ? playerScopedPatch(localPayload, player) : null;
+    const payload = patch ? null : scopedOnlinePayload();
+    if (!patch && !payload) return;
+    const result = patch && typeof window.KTFirebaseSync.pushPatch === "function"
+      ? await window.KTFirebaseSync.pushPatch(state.online.gameId, patch)
+      : await window.KTFirebaseSync.push(state.online.gameId, payload || localPayload);
     if (!result.ok) {
       state.online.enabled = false;
       state.online.status = result.reason || "Firebase sync stopped; offline mode active";
     } else {
       state.online.lastSyncAt = new Date().toISOString();
       state.online.status = "Live sync active";
+      lastRemotePayload = patch
+        ? mergePlayerScopedPayload(cloneMatchPayload(lastRemotePayload) || cloneMatchPayload(localPayload), localPayload, player)
+        : cloneMatchPayload(payload);
     }
     renderOnlineRoom();
   }, 800);
 }
 
-function showAutosavePrompt() {
-  const panel = $("autosaveRestorePanel");
-  if (!panel) return;
-  let saved = null;
-  try {
-    saved = JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || "null");
-  } catch {
-    saved = null;
-  }
-  if (!saved) return;
-  const date = saved.savedAt ? new Date(saved.savedAt).toLocaleString() : "recently";
-  if ($("autosaveRestoreText")) $("autosaveRestoreText").textContent = `Restore the match autosaved at ${date}.`;
-  panel.hidden = false;
+function roleStatusText() {
+  if (!state.online?.gameId) return "";
+  if (onlineRole() === "host") return "Host controls shared match fields.";
+  if (onlineRole() === "player-a") return "Player A link: only Player A fields can be edited.";
+  if (onlineRole() === "player-b") return "Player B link: only Player B fields can be edited.";
+  return "Spectator link: view only.";
 }
 
-function restoreAutosave() {
-  let saved = null;
-  try {
-    saved = JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || "null");
-  } catch {
-    saved = null;
+function syncOnlineModeText() {
+  const title = $("onlineRoleTitle");
+  const description = $("onlineRoleDescription");
+  if (!title || !description) return;
+  if (!state.online?.gameId) {
+    title.textContent = "Host setup";
+    description.textContent = "Create a room, copy the links, then continue to Setup as host.";
+    return;
   }
-  if (!saved) return;
-  runWithoutHistory(() => {
-    applyFormValues(saved.formValues);
-    applySerializableState(saved.state);
-    refreshAfterStateChange();
+  if (onlineRole() === "player-a") {
+    title.textContent = "Player A link";
+    description.textContent = "You can edit Player A information only. Player B is view only.";
+    return;
+  }
+  if (onlineRole() === "player-b") {
+    title.textContent = "Player B link";
+    description.textContent = "You can edit Player B information only. Player A is view only.";
+    return;
+  }
+  if (onlineRole() === "spectator") {
+    title.textContent = "Spectator link";
+    description.textContent = "This room is view only.";
+    return;
+  }
+  title.textContent = "Host controls";
+  description.textContent = "Host can edit shared match fields and create player links.";
+}
+
+function controlledPlayerFromElement(element) {
+  if (!element) return "";
+  if (element.dataset?.rolePlayer) return element.dataset.rolePlayer;
+  if (element.dataset?.score) return element.dataset.score.split(".")[0];
+  const id = element.id || "";
+  const playerAIds = new Set([
+    "playerAName",
+    "communityTeamA",
+    "teamA",
+    "tacA",
+    "primaryA",
+    "deployOpsA",
+    "equipmentReadyA",
+    "equipmentSetupA",
+    "deployDoneA",
+    "confirmTacA",
+    "unlockTacA",
+    "unlockPrimaryA",
+    "cpA",
+    "killsA",
+    "startEnemiesA",
+    "killVpA"
+  ]);
+  const playerBIds = new Set([
+    "playerBName",
+    "communityTeamB",
+    "teamB",
+    "tacB",
+    "primaryB",
+    "deployOpsB",
+    "equipmentReadyB",
+    "equipmentSetupB",
+    "deployDoneB",
+    "confirmTacB",
+    "unlockTacB",
+    "unlockPrimaryB",
+    "cpB",
+    "killsB",
+    "startEnemiesB",
+    "killVpB"
+  ]);
+  if (playerAIds.has(id)) return "a";
+  if (playerBIds.has(id)) return "b";
+  const roleNode = element.closest("[data-role-player]");
+  if (roleNode) return roleNode.dataset.rolePlayer;
+  const scoreNode = element.closest("[data-score]");
+  if (scoreNode) return scoreNode.dataset.score.split(".")[0];
+  return "";
+}
+
+function isSharedOnlineControl(element) {
+  const id = element?.id || "";
+  return new Set([
+    "critOp",
+    "killzone",
+    "mapNumber",
+    "turningPoint",
+    "tpMinus",
+    "tpPlus",
+    "gameEndButton",
+    "clearScores",
+    "resetMatchButton",
+    "matchNotes",
+    "clockToggle",
+    "clockMinutes",
+    "startPause",
+    "resetClock",
+    "passTurnA",
+    "passTurnB",
+    "livePassTurn",
+    "endgamePrimary",
+    "liveEndgamePrimary",
+    "endgamePrimaryReveal",
+    "initiativeA",
+    "initiativeB",
+    "gameInitiativeA",
+    "gameInitiativeB",
+    "chooseLocalMode",
+    "chooseOnlineMode",
+    "createOnlineGame",
+    "testFirebaseSync"
+  ]).has(id);
+}
+
+function canUseControl(element) {
+  const spectatorAllowedIds = new Set([
+    "battleReportButton",
+    "copyBattleReportButton",
+    "copyMarkdownReport",
+    "copyDiscordReport",
+    "exportReportImage",
+    "reportExportCsv",
+    "stickyCopyBattleReport",
+    "stickyExportCsv",
+    "onlineProceedSetup"
+  ]);
+  const player = controlledPlayerFromElement(element);
+  if (player) return canEditPlayer(player);
+  if (isSharedOnlineControl(element)) return canEditSharedOnlineFields();
+  if (onlineRole() === "spectator" && element?.matches?.("input, select, textarea, button")) {
+    return Boolean(element.closest(".page-nav") || element.closest(".online-link-row") || spectatorAllowedIds.has(element.id));
+  }
+  return true;
+}
+
+function setControlRoleState(element, canUse) {
+  if (!element) return;
+  const shouldDisable = !canUse;
+  const wasRoleDisabled = element.dataset.roleDisabled === "true";
+  if (!wasRoleDisabled) {
+    element.dataset.nonRoleDisabled = element.disabled ? "true" : "false";
+  }
+  element.disabled = shouldDisable;
+  element.classList.toggle("role-locked-control", shouldDisable);
+  if (shouldDisable) {
+    element.dataset.roleDisabled = "true";
+    element.title = roleStatusText() || "Locked for this online role.";
+  } else {
+    element.disabled = element.dataset.nonRoleDisabled === "true";
+    delete element.dataset.roleDisabled;
+    element.removeAttribute("title");
+  }
+}
+
+function applyRolePermissions() {
+  const restricted = isOnlineRestrictedRole();
+  document.body.classList.toggle("online-role-restricted", restricted);
+  document.body.dataset.onlineRole = state.online?.gameId ? onlineRole() : "offline";
+  [
+    ["battlePlayerA", "a"],
+    ["battlePlayerB", "b"],
+    ["liveCardA", "a"],
+    ["liveCardB", "b"],
+    ["hudPlayerA", "a"],
+    ["hudPlayerB", "b"],
+    ["detailCpA", "a"],
+    ["detailCpB", "b"],
+    ["liveCpA", "a"],
+    ["liveCpB", "b"],
+    ["deployPlanA", "a"],
+    ["deployPlanB", "b"],
+    ["primaryBoxA", "a"],
+    ["primaryBoxB", "b"],
+    ["primarySealedA", "a"],
+    ["primarySealedB", "b"],
+    ["tacSealedA", "a"],
+    ["tacSealedB", "b"]
+  ].forEach(([id, player]) => {
+    const node = $(id);
+    if (node) node.dataset.rolePlayer = player;
   });
-  if ($("autosaveRestorePanel")) $("autosaveRestorePanel").hidden = true;
-  saveAutosaveNow();
+
+  document.querySelectorAll("input, select, textarea, button").forEach((element) => {
+    if (element.closest(".page-nav")) return;
+    if (element.closest(".online-link-row")) return;
+    setControlRoleState(element, canUseControl(element));
+  });
+
+  document.querySelectorAll("[data-role-player]").forEach((node) => {
+    const player = node.dataset.rolePlayer;
+    node.classList.toggle("role-locked-section", restricted && !canEditPlayer(player));
+  });
+
+  document.querySelectorAll(".stepper-row").forEach((row) => {
+    const display = row.querySelector("[data-for-input]");
+    if (!display) return;
+    const key = display.dataset.forInput;
+    const input = key.includes(".") ? document.querySelector(`[data-score="${key}"]`) : $(key);
+    row.querySelectorAll("button").forEach((button) => {
+      button.disabled = Boolean(input?.disabled || input?.readOnly);
+      button.classList.toggle("role-locked-control", Boolean(input?.disabled));
+    });
+  });
 }
 
 function refreshAfterStateChange() {
@@ -809,6 +1134,7 @@ function refreshAfterStateChange() {
   updateResult();
   paintClock();
   setGameMode(state.gameMode || "live");
+  applyRolePermissions();
 }
 
 function enhanceScoreTableInputs() {
@@ -1056,8 +1382,17 @@ function updateTacHelp(player) {
   const target = $(`tac${player.toUpperCase()}Help`);
   target.textContent = tac && state.tacOps[player].revealed ? `${tac.archetype}: ${tac.prompt}` : "";
   updateTacSelectTone(player);
+  syncTacConfirmButton(player);
   updateDeployReadinessSummary();
   updateBattleLog();
+}
+
+function syncTacConfirmButton(player) {
+  const label = player.toUpperCase();
+  const button = $(`confirmTac${label}`);
+  if (!button) return;
+  button.hidden = !(selectedTac(player) && state.tacOps[player].revealed);
+  button.textContent = "Confirm Seal Up";
 }
 
 function updateTacSelectTone(player) {
@@ -1266,6 +1601,7 @@ function primaryChoiceSelect(player) {
   const label = playerLabel(player);
   const select = document.createElement("select");
   select.className = "battle-inline-select primary-unselected";
+  select.dataset.rolePlayer = player;
   select.append(option("", "Not selected"));
   [
     ["crit", "Crit Op"],
@@ -1292,6 +1628,7 @@ function renderGameTp1Controls() {
   ["a", "b"].forEach((player) => {
     const card = document.createElement("div");
     card.className = `tp1-primary-card player-tone-${player}`;
+    card.dataset.rolePlayer = player;
     const heading = document.createElement("span");
     heading.textContent = `${playerName(player)} Primary`;
     if (!state.primary[player].choice) {
@@ -1302,6 +1639,7 @@ function renderGameTp1Controls() {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "inline-reset-button";
+      button.dataset.rolePlayer = player;
       button.textContent = "Reset";
       button.addEventListener("click", () => {
         resetPrimary(player);
@@ -1314,6 +1652,7 @@ function renderGameTp1Controls() {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "inline-reset-button";
+      button.dataset.rolePlayer = player;
       button.textContent = "Reset";
       button.addEventListener("click", () => {
         resetPrimary(player);
@@ -1326,8 +1665,8 @@ function renderGameTp1Controls() {
 }
 
 function battleTeamItem(team) {
-  const node = document.createElement("div");
-  node.className = "battle-log-item team-line-item";
+  const node = document.createElement("p");
+  node.className = "battle-team-name";
   const nameNode = document.createElement("strong");
   nameNode.textContent = team?.name || "Not selected";
   node.append(nameNode);
@@ -1445,6 +1784,26 @@ function currentInitiativePlayer() {
   if (state.initiative.a) return "a";
   if (state.initiative.b) return "b";
   return "";
+}
+
+function previousInitiativePlayer() {
+  return state.initiative.previous || currentInitiativePlayer();
+}
+
+function currentTurningPoint() {
+  return clampNumber(Number($("turningPoint")?.value || 1), 1, 4);
+}
+
+function setCurrentInitiative(player) {
+  state.initiative.a = player === "a";
+  state.initiative.b = player === "b";
+}
+
+function ensureTp1DeployInitiative() {
+  const deployInitiative = state.initiative.deploy;
+  if (currentTurningPoint() === 1 && deployInitiative) {
+    setCurrentInitiative(deployInitiative);
+  }
 }
 
 function primaryStatus(player) {
@@ -1656,6 +2015,8 @@ function resetMatch() {
   state.deployDone.b = false;
   state.initiative.a = false;
   state.initiative.b = false;
+  state.initiative.deploy = "";
+  state.initiative.previous = "";
   ["A", "B"].forEach((label) => {
     syncEquipmentButtons(label.toLowerCase());
     syncInitiativeButton(label.toLowerCase());
@@ -1708,7 +2069,7 @@ function resetMatch() {
   updateResult();
   paintClock();
   setGameMode("live");
-  setPage("setup");
+  setPage("start");
   suppressHistory = previousSuppress;
   localStorage.removeItem(AUTOSAVE_KEY);
   recordActivity("System", "Reset Match", "Current match", "Default match");
@@ -1798,6 +2159,7 @@ function sealTac(player) {
   $(`tac${label}`).classList.add("tac-hidden");
   $(`tac${label}Help`).textContent = "";
   $(`tacSealed${label}`).hidden = false;
+  syncTacConfirmButton(player);
   updateBattleLog();
 }
 
@@ -1815,6 +2177,7 @@ function revealTac(player) {
     $(`tac${label}`).classList.add("tac-hidden");
     $(`tac${label}Help`).textContent = "";
     $(`tacSealed${label}`).hidden = false;
+    syncTacConfirmButton(player);
     updateBattleLog();
   });
 }
@@ -1835,14 +2198,33 @@ function resetTac(player) {
 function syncTac(player) {
   const oldLabel = visibleTacLabel(player);
   if (selectedTac(player)) {
-    sealTac(player);
+    const label = player.toUpperCase();
+    state.tacOps[player].revealed = true;
+    $(`tac${label}`).classList.remove("tac-hidden");
+    $(`tacSealed${label}`).hidden = true;
+    updateTacHelp(player);
     recordActivity(playerName(player), "Tac Op choice", oldLabel, selectedTac(player)?.name || "Not selected", () => resetTac(player));
     return;
   }
-  revealTac(player);
+  resetTac(player);
+}
+
+function confirmTac(player) {
+  const tac = selectedTac(player);
+  if (!tac) return;
+  const label = player.toUpperCase();
+  sealTac(player);
+  recordActivity(playerName(player), "Confirm Tac Op", tac.name, "Sealed up - locked", () => {
+    state.tacOps[player].revealed = true;
+    $(`tac${label}`).classList.remove("tac-hidden");
+    $(`tacSealed${label}`).hidden = true;
+    updateTacHelp(player);
+    updateBattleLog();
+  });
 }
 
 function handleTurningPointChange() {
+  ensureTp1DeployInitiative();
   syncTurningPointDisplay();
   updateKillOpScores();
   updateBattleLog();
@@ -1852,6 +2234,7 @@ function handleTurningPointChange() {
 }
 
 function syncTurningPointDisplay() {
+  ensureTp1DeployInitiative();
   const tp = clampNumber(Number($("turningPoint")?.value || 1), 1, 4);
   if ($("turningPointDisplay")) $("turningPointDisplay").textContent = `TURNING POINT ${tp}`;
   if ($("tpMinus")) $("tpMinus").disabled = tp <= 1;
@@ -1874,9 +2257,16 @@ function adjustTurningPoint(delta) {
   const oldTp = Number(select.value || 1);
   const next = clampNumber(Number(select.value || 1) + delta, 1, 4);
   if (oldTp === next) return;
+  const oldInitiative = currentInitiativePlayer();
+  const oldPrevious = state.initiative.previous || "";
+  if (oldInitiative && next > oldTp) {
+    state.initiative.previous = oldInitiative;
+  }
   select.value = String(next);
   recordActivity("Match", "Turning Point", `TP${oldTp}`, `TP${next}`, () => {
     select.value = String(oldTp);
+    setCurrentInitiative(oldInitiative);
+    state.initiative.previous = oldPrevious;
     handleTurningPointChange();
   });
   handleTurningPointChange();
@@ -1962,18 +2352,32 @@ function syncEquipmentButtons(player) {
   }
   updateDeployReadinessSummary();
 }
-function toggleInitiative(player) {
-  const oldPlayer = state.initiative.a ? "a" : state.initiative.b ? "b" : "";
-  state.initiative.a = player === "a";
-  state.initiative.b = player === "b";
+function toggleInitiative(player, source = "battle") {
+  const oldPlayer = currentInitiativePlayer();
+  const oldDeploy = state.initiative.deploy || "";
+  const oldPrevious = state.initiative.previous || "";
+  const tp = currentTurningPoint();
+  const isDeployChoice = source === "deploy" || tp === 1;
+
+  if (isDeployChoice) {
+    state.initiative.deploy = player;
+  } else if (oldPlayer && oldPlayer !== player) {
+    state.initiative.previous = oldPlayer;
+  }
+  setCurrentInitiative(player);
   syncInitiativeButton("a");
   syncInitiativeButton("b");
   renderGameTp1Controls();
   updateDeployReadinessSummary();
-  if (oldPlayer !== player) {
-    recordActivity("Match", "Initiative", oldPlayer ? playerName(oldPlayer) : "Not selected", playerName(player), () => {
-      state.initiative.a = oldPlayer === "a";
-      state.initiative.b = oldPlayer === "b";
+  if (oldPlayer !== player || (isDeployChoice && oldDeploy !== player)) {
+    const activityLabel = isDeployChoice ? "Deploy Initiative" : "Initiative";
+    const oldValue = isDeployChoice
+      ? (oldDeploy ? playerName(oldDeploy) : "Not selected")
+      : (oldPlayer ? playerName(oldPlayer) : "Not selected");
+    recordActivity("Match", activityLabel, oldValue, playerName(player), () => {
+      setCurrentInitiative(oldPlayer);
+      state.initiative.deploy = oldDeploy;
+      state.initiative.previous = oldPrevious;
       syncInitiativeButton("a");
       syncInitiativeButton("b");
       renderGameTp1Controls();
@@ -1984,18 +2388,37 @@ function toggleInitiative(player) {
 function syncInitiativeButton(player) {
   const label = playerLabel(player);
   const name = playerName(player);
-  [`initiative${label}`, `gameInitiative${label}`].forEach((id) => {
-    const button = $(id);
-    if (!button) return;
-    button.classList.toggle("ready-active", state.initiative[player]);
-    button.textContent = state.initiative[player] ? `Initiative - ${name}` : `Player ${label} - ${name}`;
-  });
+  const deployButton = $(`initiative${label}`);
+  if (deployButton) {
+    const activeDeploy = state.initiative.deploy === player;
+    deployButton.classList.toggle("ready-active", activeDeploy);
+    deployButton.textContent = activeDeploy ? `Initiative - ${name}` : `Player ${label} - ${name}`;
+  }
+  const battleButton = $(`gameInitiative${label}`);
+  if (battleButton) {
+    const activeBattle = currentInitiativePlayer() === player;
+    battleButton.classList.toggle("ready-active", activeBattle);
+    battleButton.textContent = activeBattle ? `Initiative - ${name}` : `Player ${label} - ${name}`;
+  }
+  updatePreviousInitiativeText();
+}
+
+function updatePreviousInitiativeText() {
+  const target = $("previousInitiativeText");
+  if (!target) return;
+  if (currentTurningPoint() === 1) {
+    const deployInitiative = state.initiative.deploy || currentInitiativePlayer();
+    target.textContent = `Deploy initiative: ${deployInitiative ? playerName(deployInitiative) : "Not selected"}`;
+    return;
+  }
+  const previous = previousInitiativePlayer();
+  target.textContent = `Previous initiative: ${previous ? playerName(previous) : "Not selected"}`;
 }
 
 function deployReadiness(player) {
   const tacReady = Boolean(selectedTac(player)) || !state.tacOps[player].revealed;
   const steps = [
-    state.initiative[player],
+    state.initiative.deploy === player,
     state.equipment[player],
     state.equipmentSetup[player],
     tacReady,
@@ -2756,6 +3179,7 @@ async function createOnlineGameRoom() {
   state.online = {
     gameId: id,
     enabled: false,
+    mode: "online",
     role: "host",
     status: "Preparing online room",
     links: {
@@ -2770,7 +3194,11 @@ async function createOnlineGameRoom() {
       state.online.enabled = true;
       state.online.uid = result.uid;
       state.online.status = "Live sync active";
-      await window.KTFirebaseSync.subscribe(id, (data) => applyRemoteMatchPayload(data.payload));
+      const listenResult = await window.KTFirebaseSync.subscribe(id, (data) => applyRemoteMatchPayload(data.payload));
+      if (!listenResult.ok) {
+        state.online.enabled = false;
+        state.online.status = listenResult.reason || "Firebase listener failed; offline links only";
+      }
     } else {
       state.online.status = result.reason || "Firebase unavailable; offline links only";
     }
@@ -2782,12 +3210,30 @@ async function createOnlineGameRoom() {
   saveAutosaveNow();
 }
 
+async function testFirebaseConnection() {
+  const statusOutput = $("onlineGameStatus");
+  if (statusOutput) statusOutput.textContent = "Testing Firebase...";
+  if (!window.KTFirebaseSync) {
+    state.online.status = "Firebase module unavailable; offline mode active";
+    renderOnlineRoom();
+    return;
+  }
+  const result = await window.KTFirebaseSync.init();
+  if (result.ok) {
+    state.online.status = `Firebase ready - anonymous user ${String(result.uid || "").slice(0, 6)}...`;
+  } else {
+    state.online.status = result.reason || "Firebase unavailable; offline mode active";
+  }
+  renderOnlineRoom();
+}
+
 function renderOnlineRoom() {
   if (!$("onlineGameStatus")) return;
+  syncOnlineModeText();
   const links = state.online.links;
   $("onlineGameStatus").textContent = state.online.gameId
     ? `Game ID: ${state.online.gameId} - ${state.online.status || "Offline links only"}`
-    : "Local offline match";
+    : state.online.status || "Local offline match";
   const target = $("onlineJoinLinks");
   if (!target) return;
   target.hidden = !links;
@@ -2814,6 +3260,33 @@ function renderOnlineRoom() {
     row.append(span, input, button);
     return row;
   }));
+  applyRolePermissions();
+}
+
+function chooseLocalMode() {
+  state.online = {
+    gameId: "",
+    links: null,
+    enabled: false,
+    mode: "local",
+    role: "host",
+    status: "Local offline match"
+  };
+  renderOnlineRoom();
+  setPage("setup");
+  saveAutosaveNow();
+}
+
+function chooseOnlineMode() {
+  state.online = {
+    ...state.online,
+    mode: "online",
+    role: state.online?.role || "host",
+    status: state.online?.status || "Online room not created yet"
+  };
+  renderOnlineRoom();
+  setPage("online");
+  saveAutosaveNow();
 }
 
 async function joinOnlineGameFromUrl() {
@@ -2825,6 +3298,7 @@ async function joinOnlineGameFromUrl() {
   state.online = {
     gameId: roomId,
     enabled: false,
+    mode: "online",
     role,
     status: "Joining online room",
     links: {
@@ -2834,6 +3308,7 @@ async function joinOnlineGameFromUrl() {
     }
   };
   renderOnlineRoom();
+  setPage("online");
   if (!window.KTFirebaseSync) {
     state.online.status = "Firebase module unavailable; offline mode active";
     renderOnlineRoom();
@@ -2844,10 +3319,12 @@ async function joinOnlineGameFromUrl() {
     state.online.enabled = true;
     state.online.uid = result.uid;
     state.online.status = `Live sync active as ${role}`;
+    state.page = "setup";
   } else {
     state.online.status = result.reason || "Firebase unavailable; offline mode active";
   }
   renderOnlineRoom();
+  if (result.ok) setPage("setup");
 }
 
 async function loadRules() {
@@ -2880,6 +3357,7 @@ function wireEvents() {
       updateResult();
     });
     $(`tac${player}`).addEventListener("change", () => syncTac(player.toLowerCase()));
+    $(`confirmTac${player}`).addEventListener("click", () => confirmTac(player.toLowerCase()));
   });
   $("critOp").addEventListener("change", () => {
     updateCritHelp();
@@ -2889,9 +3367,6 @@ function wireEvents() {
   $("turningPoint").addEventListener("change", handleTurningPointChange);
   $("tpMinus").addEventListener("click", () => adjustTurningPoint(-1));
   $("tpPlus").addEventListener("click", advanceBattleFlow);
-  document.querySelectorAll("[data-hud-action]").forEach((button) => {
-    button.addEventListener("click", () => handleHudAction(button.dataset.hudAction));
-  });
   document.querySelectorAll("[data-end-tp-check]").forEach((input) => {
     input.addEventListener("change", () => updateEndTpCheck(input));
   });
@@ -2909,10 +3384,10 @@ function wireEvents() {
     const button = $(id);
     if (button) button.addEventListener("click", () => toggleEquipmentSetup(player));
   });
-  $("initiativeA").addEventListener("click", () => toggleInitiative("a"));
-  $("initiativeB").addEventListener("click", () => toggleInitiative("b"));
-  $("gameInitiativeA").addEventListener("click", () => toggleInitiative("a"));
-  $("gameInitiativeB").addEventListener("click", () => toggleInitiative("b"));
+  $("initiativeA").addEventListener("click", () => toggleInitiative("a", "deploy"));
+  $("initiativeB").addEventListener("click", () => toggleInitiative("b", "deploy"));
+  $("gameInitiativeA").addEventListener("click", () => toggleInitiative("a", "battle"));
+  $("gameInitiativeB").addEventListener("click", () => toggleInitiative("b", "battle"));
   $("setupGameStart").addEventListener("click", () => setPage("deploy"));
   $("deployGameStart").addEventListener("click", () => setPage("game"));
   $("gameEndButton").addEventListener("click", advanceBattleFlow);
@@ -2976,11 +3451,11 @@ function wireEvents() {
   $("exportReportImage").addEventListener("click", exportReportImage);
   $("stickyCopyBattleReport").addEventListener("click", copyBattleReport);
   $("stickyExportCsv").addEventListener("click", exportCsv);
+  $("chooseLocalMode").addEventListener("click", chooseLocalMode);
+  $("chooseOnlineMode").addEventListener("click", chooseOnlineMode);
+  $("onlineProceedSetup").addEventListener("click", () => setPage("setup"));
   $("createOnlineGame").addEventListener("click", createOnlineGameRoom);
-  $("restoreAutosaveButton").addEventListener("click", restoreAutosave);
-  $("dismissAutosaveButton").addEventListener("click", () => {
-    $("autosaveRestorePanel").hidden = true;
-  });
+  $("testFirebaseSync").addEventListener("click", testFirebaseConnection);
   document.addEventListener("input", scheduleAutosave);
   document.addEventListener("change", scheduleAutosave);
   window.addEventListener("beforeunload", saveAutosaveNow);
@@ -3015,14 +3490,12 @@ async function init() {
   updateKillOpScores();
   syncTurningPointDisplay();
   setGameMode("live");
-  setPage("setup");
+  setPage(state.page || "start");
   renderEndTpChecklist();
   renderActivityLog();
   renderOnlineRoom();
-  showAutosavePrompt();
-  const waitingForRestore = $("autosaveRestorePanel") && !$("autosaveRestorePanel").hidden;
   appReady = true;
-  if (!waitingForRestore) saveAutosaveNow();
+  saveAutosaveNow();
   await joinOnlineGameFromUrl();
 }
 

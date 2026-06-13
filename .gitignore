@@ -4,3 +4,7 @@ node_modules/
 Thumbs.db
 *.log
 /firebase-config.js
+firebase.exe
+firebase-new.exe
+firepit-log.txt
+offline-backup-*.zip

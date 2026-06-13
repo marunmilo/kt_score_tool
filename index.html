@@ -10,38 +10,90 @@
     <main class="app-shell">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Kill Team 3rd Edition</p>
+          <p class="eyebrow">Warhammer Kill Team 2024 3rd Edition</p>
           <h1>Kill Team Score Tool</h1>
           <p class="subtitle">@MARU&amp;MILO</p>
         </div>
-        <div class="source-card" id="sourceCard">
-          <span class="status-dot"></span>
-          <span>Loading rules data...</span>
+        <div class="topbar-actions">
+          <button class="reset-match-button" id="resetMatchButton" type="button">Reset</button>
+          <div class="source-card" id="sourceCard">
+            <span class="status-dot"></span>
+            <span>Loading rules data...</span>
+          </div>
         </div>
-        <button class="reset-match-button" id="resetMatchButton" type="button">Reset</button>
       </header>
 
       <nav class="page-nav" aria-label="Scoreboard pages">
-        <button class="page-tab active" type="button" data-page-target="setup">Setup</button>
+        <button class="page-tab active" type="button" data-page-target="start">Start</button>
+        <button class="page-tab" type="button" data-page-target="online">Online Room</button>
+        <button class="page-tab" type="button" data-page-target="setup">Setup</button>
         <button class="page-tab" type="button" data-page-target="deploy">Deploy</button>
         <button class="page-tab" type="button" data-page-target="game">Battle</button>
         <button class="page-tab" type="button" data-page-target="endgame">Endgame</button>
         <button class="page-tab" type="button" data-page-target="report">Battle Report</button>
       </nav>
 
-      <section class="panel autosave-restore-panel" id="autosaveRestorePanel" aria-label="Restore autosaved match" hidden>
-        <div>
-          <p class="eyebrow">Autosave</p>
-          <h2>Previous match found</h2>
-          <p class="hint" id="autosaveRestoreText">Restore your last local match state.</p>
-        </div>
-        <div class="autosave-actions">
-          <button id="restoreAutosaveButton" type="button">Restore</button>
-          <button id="dismissAutosaveButton" type="button">Dismiss</button>
-        </div>
+      <section class="page active" id="pageStart" data-page="start" aria-label="Start page">
+        <section class="mission-strip start-strip" aria-label="Choose match mode">
+          <div class="mission-copy">
+            <p class="eyebrow">Match Mode</p>
+            <h2>Choose Local or Online</h2>
+            <p class="hint">Pick how this battle will run before player setup.</p>
+          </div>
+        </section>
+
+        <section class="grid start-mode-grid" aria-label="Match mode choices">
+          <article class="panel start-mode-card">
+            <p class="eyebrow">Local</p>
+            <h2>Same device match</h2>
+            <p class="hint">Use this iPhone, iPad, or browser as one shared score tool.</p>
+            <button id="chooseLocalMode" type="button">Local Match</button>
+          </article>
+
+          <article class="panel start-mode-card online-mode-card">
+            <p class="eyebrow">Online</p>
+            <h2>Player links</h2>
+            <p class="hint">Create a room with Player A, Player B, and Spectator links. Each player edits only their own side.</p>
+            <button id="chooseOnlineMode" type="button">Online Match</button>
+          </article>
+        </section>
       </section>
 
-      <section class="page active" id="pageSetup" data-page="setup" aria-label="Setup page">
+      <section class="page" id="pageOnline" data-page="online" aria-label="Online room page">
+        <section class="mission-strip online-strip" aria-label="Online room setup">
+          <div class="mission-copy">
+            <p class="eyebrow">Online Room</p>
+            <h2>Share Player Links</h2>
+            <p class="hint">Player A link can edit Player A only. Player B link can edit Player B only. Spectator is view only.</p>
+          </div>
+        </section>
+
+        <section class="panel online-room-panel online-room-page-panel" aria-label="Online game room">
+          <div>
+            <p class="eyebrow">Room</p>
+            <h2>Create Online Game</h2>
+            <p class="hint">Realtime sync needs Firebase to be ready. Local mode still works if Firebase is unavailable.</p>
+          </div>
+          <div class="online-room-actions">
+            <button id="createOnlineGame" type="button">Create Online Game</button>
+            <button id="testFirebaseSync" type="button">Test Firebase</button>
+            <output id="onlineGameStatus">Local offline match</output>
+          </div>
+          <div class="online-link-grid" id="onlineJoinLinks" hidden></div>
+        </section>
+
+        <section class="panel online-role-note" aria-label="Online role rules">
+          <p class="eyebrow">Role Lock</p>
+          <h2 id="onlineRoleTitle">Host setup</h2>
+          <p class="hint" id="onlineRoleDescription">Create a room, copy the links, then continue to Setup as host.</p>
+        </section>
+
+        <section class="setup-start-row" aria-label="Open setup">
+          <button id="onlineProceedSetup" type="button">Proceed to Setup</button>
+        </section>
+      </section>
+
+      <section class="page" id="pageSetup" data-page="setup" aria-label="Setup page">
         <section class="setup-date-strip" aria-label="Match date">
           <span>Match Date</span>
           <strong id="setupDate">Today</strong>
@@ -145,19 +197,6 @@
           <p id="setupPreviewMission">Mission: Secure / Volkus / Map 1</p>
         </section>
 
-        <section class="panel online-room-panel" aria-label="Online game room">
-          <div>
-            <p class="eyebrow">Online Room</p>
-            <h2>Create Online Game</h2>
-            <p class="hint">Offline mode stays active. Realtime sync needs Firebase config before this room can go live.</p>
-          </div>
-          <div class="online-room-actions">
-            <button id="createOnlineGame" type="button">Create Online Game</button>
-            <output id="onlineGameStatus">Local offline match</output>
-          </div>
-          <div class="online-link-grid" id="onlineJoinLinks" hidden></div>
-        </section>
-
         <section class="setup-start-row" aria-label="Open deploy">
           <button id="setupGameStart" type="button">Proceed to Deploy</button>
         </section>
@@ -205,6 +244,7 @@
               Tac Op
               <select id="tacA"></select>
             </label>
+            <button class="tac-confirm-button" id="confirmTacA" type="button" hidden>Confirm Seal Up</button>
 
             <p class="hint" id="tacAHelp"></p>
             <div class="tac-sealed" id="tacSealedA" hidden>
@@ -266,6 +306,7 @@
               Tac Op
               <select id="tacB"></select>
             </label>
+            <button class="tac-confirm-button" id="confirmTacB" type="button" hidden>Confirm Seal Up</button>
 
             <p class="hint" id="tacBHelp"></p>
             <div class="tac-sealed" id="tacSealedB" hidden>
@@ -373,6 +414,7 @@
               <button class="initiative-button" id="gameInitiativeA" type="button">Player A</button>
               <button class="initiative-button" id="gameInitiativeB" type="button">Player B</button>
             </div>
+            <p class="initiative-history" id="previousInitiativeText">Previous initiative: Not selected</p>
           </div>
           <div class="tp1-game-group" id="gamePrimaryGroup">
             <p class="eyebrow">Primary Op</p>
@@ -392,13 +434,6 @@
             <div class="live-hud-grid">
               <article class="hud-player player-tone-a" id="hudPlayerA"></article>
               <article class="hud-player player-tone-b" id="hudPlayerB"></article>
-            </div>
-            <div class="hud-quick-actions" aria-label="Quick scoring">
-              <button data-hud-action="crit" type="button">+ Crit</button>
-              <button data-hud-action="tac" type="button">+ Tac</button>
-              <button data-hud-action="kill" type="button">+ Kill</button>
-              <button data-hud-action="cp" type="button">+ CP</button>
-              <button data-hud-action="more" type="button">More</button>
             </div>
           </section>
 
@@ -600,13 +635,6 @@
           <button id="gameEndButton" type="button">End Game</button>
         </section>
 
-        <section class="mobile-live-actions" aria-label="Mobile live quick actions">
-          <button data-hud-action="crit" type="button">+Crit</button>
-          <button data-hud-action="tac" type="button">+Tac</button>
-          <button data-hud-action="kill" type="button">+Kill</button>
-          <button data-hud-action="cp" type="button">CP</button>
-          <button data-hud-action="more" type="button">More</button>
-        </section>
       </section>
 
       <section class="page" id="pageEndgame" data-page="endgame" aria-label="Endgame page">
