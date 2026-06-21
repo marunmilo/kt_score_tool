@@ -1176,7 +1176,7 @@ function enhanceDeployOperativeInputs() {
     const field = input?.closest(".deploy-operative-row");
     if (!input || !field || field.querySelector(".deploy-operative-stepper")) return;
     input.classList.add("native-count-input");
-    field.append(makeStepper("Starting Operatives", input, "operative-stepper deploy-operative-stepper"));
+    field.append(makeStepper("Select & Reveal Operatives", input, "operative-stepper deploy-operative-stepper"));
   });
 }
 
@@ -1819,7 +1819,7 @@ function renderHudPlayer(player) {
   const initiative = currentInitiativePlayer() === player;
   const crit = scoreTotal(player, "crit");
   const tac = scoreTotal(player, "tac");
-  const kill = Number(state.scores[player].kill || 0);
+  const kill = killOpDetails(player);
   card.classList.toggle("initiative-active", initiative);
   card.replaceChildren();
   const head = document.createElement("div");
@@ -1839,7 +1839,7 @@ function renderHudPlayer(player) {
     ["CP", state.cp[player]],
     ["CO", vpLabel(crit)],
     ["TO", vpLabel(tac)],
-    ["KO", vpLabel(kill)],
+    ["KO", `${kill.kills}/${kill.startingEnemies} | ${state.scores[player].kill}VP`],
     ["Primary", primaryStatus(player)]
   ].forEach(([label, value]) => {
     const item = document.createElement("div");
@@ -1893,13 +1893,10 @@ function handleHudAction(action) {
   if (action === "tac") adjustInputValue(scoreInput(player, "tac", scoringIndex), 1);
 }
 
-function setGameMode(mode) {
-  state.gameMode = mode;
-  $("liveModePanel").classList.toggle("active", mode === "live");
-  $("detailModePanel").classList.toggle("active", mode === "detail");
-  document.querySelectorAll("[data-mode-target]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.modeTarget === mode);
-  });
+function setGameMode() {
+  state.gameMode = "live";
+  $("liveModePanel")?.classList.add("active");
+  $("detailModePanel")?.classList.remove("active");
 }
 
 function updateEndgameResult() {
@@ -2279,7 +2276,7 @@ function advanceBattleFlow() {
     setPage("endgame");
     return;
   }
-  if (!confirm(`End TP${tp} and go to TP${tp + 1}?`)) return;
+  if (tp > 1 && !confirm(`End TP${tp} and go to TP${tp + 1}?`)) return;
   adjustTurningPoint(1);
 }
 
